@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KB Keywords Index</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #252836;
+      --border: #2e3248;
+      --accent: #6c8ef7;
+      --accent2: #a78bfa;
+      --green: #34d399;
+      --red: #f87171;
+      --text: #e2e8f0;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      --mono: 'JetBrains Mono', 'Fira Code', monospace;
+      --sans: 'Inter', system-ui, sans-serif;
+      --radius: 8px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: var(--sans);
+           font-size: 14px; line-height: 1.6; padding: 2rem; }
+    header { margin-bottom: 2.5rem; }
+    header h1 { font-size: 1.6rem; font-weight: 700; color: var(--accent); letter-spacing: -.02em; }
+    header .meta { color: var(--text-muted); font-size: .85rem; margin-top: .3rem; font-family: var(--mono); }
+    .stats { display: flex; gap: 1rem; margin-bottom: 2.5rem; flex-wrap: wrap; }
+    .stat-card { background: var(--surface); border: 1px solid var(--border);
+                 border-radius: var(--radius); padding: 1rem 1.4rem; min-width: 140px; }
+    .stat-card .val { font-size: 2rem; font-weight: 700; font-family: var(--mono); line-height: 1; }
+    .stat-card .label { font-size: .75rem; color: var(--text-muted); text-transform: uppercase;
+                        letter-spacing: .06em; margin-top: .3rem; }
+    .stat-card.blue .val { color: var(--accent); }
+    .stat-card.green .val { color: var(--green); }
+    .stat-card.red .val { color: var(--red); }
+    .stat-card.purple .val { color: var(--accent2); }
+    section { margin-bottom: 3rem; }
+    section h2 { font-size: 1rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase;
+                 letter-spacing: .08em; margin-bottom: 1rem; padding-bottom: .5rem;
+                 border-bottom: 1px solid var(--border); }
+    section h2 .count { font-size: .85rem; font-weight: 400; color: var(--text-dim); margin-left: .5rem; }
+    .search-bar { margin-bottom: 1rem; }
+    .search-bar input { background: var(--surface); border: 1px solid var(--border);
+                        border-radius: var(--radius); color: var(--text); font-family: var(--mono);
+                        font-size: .85rem; padding: .5rem .9rem; width: 320px; outline: none;
+                        transition: border-color .2s; }
+    .search-bar input:focus { border-color: var(--accent); }
+    .search-bar input::placeholder { color: var(--text-dim); }
+    .table-wrap { overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--border); }
+    table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+    thead { background: var(--surface2); }
+    thead th { padding: .75rem 1rem; text-align: left; font-size: .75rem; text-transform: uppercase;
+               letter-spacing: .06em; color: var(--text-muted); font-weight: 600; white-space: nowrap; }
+    tbody tr { border-top: 1px solid var(--border); transition: background .1s; }
+    tbody tr:hover { background: var(--surface); }
+    tbody td { padding: .7rem 1rem; vertical-align: top; }
+    .file-path { font-family: var(--mono); font-size: .78rem; color: var(--accent); white-space: nowrap; }
+    .kw-cell, .kw-files { display: flex; flex-wrap: wrap; gap: .3rem; }
+    .kw-tag { display: inline-block; background: rgba(108,142,247,.12); color: var(--accent);
+              border: 1px solid rgba(108,142,247,.25); border-radius: 4px;
+              padding: .1rem .45rem; font-size: .75rem; font-family: var(--mono); white-space: nowrap; }
+    .issue { display: inline-block; background: rgba(248,113,113,.1); color: var(--red);
+             border: 1px solid rgba(248,113,113,.25); border-radius: 4px;
+             padding: .1rem .45rem; font-size: .75rem; margin: .1rem .15rem .1rem 0; }
+    .file-ref { font-family: var(--mono); font-size: .75rem; color: var(--text-muted); }
+    .empty { color: var(--text-dim); font-style: italic; padding: 1rem; text-align: center; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>KB Keywords Index</h1>
+  <div class="meta">Root: C:\Users\RemiLequette\Development\projects\claude-knowledge &nbsp;·&nbsp; Generated: 2026-05-30 19:07</div>
+</header>
+
+<div class="stats">
+  <div class="stat-card blue">  <div class="val">21</div>     <div class="label">Total files</div></div>
+  <div class="stat-card green"> <div class="val">20</div>    <div class="label">Conformant</div></div>
+  <div class="stat-card red">   <div class="val">1</div> <div class="label">Non-conformant</div></div>
+  <div class="stat-card purple"><div class="val">128</div>    <div class="label">Unique keywords</div></div>
+</div>
+
+<section>
+  <h2>Keyword Index <span class="count">(128 unique keywords, alphabetical)</span></h2>
+  <div class="search-bar">
+    <input type="text" id="kw-search" placeholder="Filter keywords..." oninput="filterKeywords()">
+  </div>
+  <div class="table-wrap"><table><thead><tr><th>Keyword</th><th>Files</th><th>Sources</th></tr></thead><tbody>
+    <tr>
+      <td><span class="kw-tag">---</span></td>
+      <td>15</td>
+      <td class="kw-files"><span class="file-ref">Claude.md</span> <span class="file-ref">INDEX.md</span> <span class="file-ref">PROJECT.md</span> <span class="file-ref">README.md</span> <span class="file-ref">conventions\claude-chrome-mcp.md</span> <span class="file-ref">conventions\claude-structured-reasoning.md</span> <span class="file-ref">conventions\commwise-layout.md</span> <span class="file-ref">conventions\commwise-modals.md</span> <span class="file-ref">conventions\filesystem.md</span> <span class="file-ref">conventions\indexeddb-file-protocol.md</span> <span class="file-ref">conventions\sqlite.md</span> <span class="file-ref">guides\audit-process.md</span> <span class="file-ref">guides\best-practices.md</span> <span class="file-ref">guides\guide-maintenance.md</span> <span class="file-ref">workflows\session-startup.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">AfrSCM</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\indexeddb-file-protocol.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">analysis</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\claude-structured-reasoning.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">ancres</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\documentation.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">architecture</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">README.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">archivage</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\todo.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">audit</span></td>
+      <td>5</td>
+      <td class="kw-files"><span class="file-ref">GLOSSARY.md</span> <span class="file-ref">PROJECT.md</span> <span class="file-ref">conventions\glossary.md</span> <span class="file-ref">guides\audit-process.md</span> <span class="file-ref">guides\best-practices.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">backlog</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\todo.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">best-practice</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">GLOSSARY.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">best-practices</span></td>
+      <td>3</td>
+      <td class="kw-files"><span class="file-ref">guides\audit-process.md</span> <span class="file-ref">guides\best-practices.md</span> <span class="file-ref">guides\project-setup-process.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">browser</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\claude-chrome-mcp.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">browser-storage</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\indexeddb-file-protocol.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">button</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\commwise-modals.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">chain-of-thought</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\claude-structured-reasoning.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">changelog</span></td>
+      <td>2</td>
+      <td class="kw-files"><span class="file-ref">conventions\documentation.md</span> <span class="file-ref">guides\guide-maintenance.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">checklist</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">guides\project-setup-process.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">Chrome</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\claude-chrome-mcp.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">clarity</span></td>
+      <td>2</td>
+      <td class="kw-files"><span class="file-ref">conventions\claude-structured-reasoning.md</span> <span class="file-ref">guides\best-practices.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">claude</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">Claude.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">claude-assisted</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">guides\project-setup-process.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">CommWise</span></td>
+      <td>2</td>
+      <td class="kw-files"><span class="file-ref">conventions\commwise-layout.md</span> <span class="file-ref">conventions\commwise-modals.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">configuration</span></td>
+      <td>2</td>
+      <td class="kw-files"><span class="file-ref">Claude.md</span> <span class="file-ref">guides\project-setup-process.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">conformance</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">guides\audit-process.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">conformite</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\glossary.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">consistency</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">guides\guide-maintenance.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">constraints</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\claude-structured-reasoning.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">context</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">guides\best-practices.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">convention</span></td>
+      <td>2</td>
+      <td class="kw-files"><span class="file-ref">GLOSSARY.md</span> <span class="file-ref">conventions\documentation.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">conventions</span></td>
+      <td>8</td>
+      <td class="kw-files"><span class="file-ref">INDEX.md</span> <span class="file-ref">PROJECT.md</span> <span class="file-ref">conventions\claude-chrome-mcp.md</span> <span class="file-ref">conventions\commwise-layout.md</span> <span class="file-ref">conventions\filesystem.md</span> <span class="file-ref">conventions\sqlite.md</span> <span class="file-ref">guides\best-practices.md</span> <span class="file-ref">workflows\session-startup.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">copy</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\filesystem.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">CSS</span></td>
+      <td>2</td>
+      <td class="kw-files"><span class="file-ref">conventions\commwise-layout.md</span> <span class="file-ref">conventions\commwise-modals.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">database</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\sqlite.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">DDL</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\sqlite.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">dds-hidden</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\commwise-modals.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">debug</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\claude-chrome-mcp.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">decomposition</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\claude-structured-reasoning.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">definitions</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\glossary.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">deviations</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">guides\audit-process.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">disabled</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\commwise-modals.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">discoverability</span></td>
+      <td>3</td>
+      <td class="kw-files"><span class="file-ref">INDEX.md</span> <span class="file-ref">guides\best-practices.md</span> <span class="file-ref">guides\guide-maintenance.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">display</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\commwise-modals.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">documentation</span></td>
+      <td>3</td>
+      <td class="kw-files"><span class="file-ref">conventions\documentation.md</span> <span class="file-ref">guides\best-practices.md</span> <span class="file-ref">guides\guide-maintenance.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">DOM</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\claude-chrome-mcp.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">domain</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">GLOSSARY.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">domaines</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\glossary.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">entry-point</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">workflows\session-startup.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">exhaustive</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">guides\audit-process.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">file-protocol</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\indexeddb-file-protocol.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">files</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\filesystem.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">filesystem</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\filesystem.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">flex</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\commwise-layout.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">glossaire</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\glossary.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">glossary</span></td>
+      <td>2</td>
+      <td class="kw-files"><span class="file-ref">GLOSSARY.md</span> <span class="file-ref">conventions\glossary.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">guide</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">GLOSSARY.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">guides</span></td>
+      <td>3</td>
+      <td class="kw-files"><span class="file-ref">INDEX.md</span> <span class="file-ref">PROJECT.md</span> <span class="file-ref">guides\guide-maintenance.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">HTML</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\indexeddb-file-protocol.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">human</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">README.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">idees</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\todo.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">index</span></td>
+      <td>2</td>
+      <td class="kw-files"><span class="file-ref">INDEX.md</span> <span class="file-ref">conventions\documentation.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">indexedDB</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\indexeddb-file-protocol.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">initialization</span></td>
+      <td>2</td>
+      <td class="kw-files"><span class="file-ref">guides\project-setup-process.md</span> <span class="file-ref">workflows\session-startup.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">inspect</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\claude-chrome-mcp.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">instructions</span></td>
+      <td>2</td>
+      <td class="kw-files"><span class="file-ref">Claude.md</span> <span class="file-ref">guides\best-practices.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">javascript</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\claude-chrome-mcp.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">keywords</span></td>
+      <td>2</td>
+      <td class="kw-files"><span class="file-ref">conventions\documentation.md</span> <span class="file-ref">guides\best-practices.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">knowledge-base</span></td>
+      <td>5</td>
+      <td class="kw-files"><span class="file-ref">Claude.md</span> <span class="file-ref">GLOSSARY.md</span> <span class="file-ref">INDEX.md</span> <span class="file-ref">PROJECT.md</span> <span class="file-ref">README.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">layout</span></td>
+      <td>2</td>
+      <td class="kw-files"><span class="file-ref">conventions\claude-chrome-mcp.md</span> <span class="file-ref">conventions\commwise-layout.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">localStorage</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\indexeddb-file-protocol.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">maintenance</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">guides\guide-maintenance.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">markdown</span></td>
+      <td>2</td>
+      <td class="kw-files"><span class="file-ref">GLOSSARY.md</span> <span class="file-ref">conventions\documentation.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">max-height</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\commwise-layout.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">MCP</span></td>
+      <td>3</td>
+      <td class="kw-files"><span class="file-ref">conventions\claude-chrome-mcp.md</span> <span class="file-ref">conventions\filesystem.md</span> <span class="file-ref">conventions\sqlite.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">metadata</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">PROJECT.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">methodology</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">guides\audit-process.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">modal</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\commwise-modals.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">navigation</span></td>
+      <td>4</td>
+      <td class="kw-files"><span class="file-ref">INDEX.md</span> <span class="file-ref">README.md</span> <span class="file-ref">conventions\documentation.md</span> <span class="file-ref">guides\best-practices.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">neutral</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">guides\audit-process.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">new-project</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">guides\project-setup-process.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">node</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\filesystem.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">opacity</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\commwise-modals.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">overlay</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\commwise-modals.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">override</span></td>
+      <td>2</td>
+      <td class="kw-files"><span class="file-ref">conventions\commwise-layout.md</span> <span class="file-ref">conventions\commwise-modals.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">patch</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\indexeddb-file-protocol.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">persistence</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\indexeddb-file-protocol.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">pragmatic</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">guides\audit-process.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">priorite</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\todo.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">procedure</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">workflows\session-startup.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">process</span></td>
+      <td>2</td>
+      <td class="kw-files"><span class="file-ref">guides\audit-process.md</span> <span class="file-ref">guides\project-setup-process.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">project</span></td>
+      <td>2</td>
+      <td class="kw-files"><span class="file-ref">PROJECT.md</span> <span class="file-ref">guides\audit-process.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">project-setup</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">guides\project-setup-process.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">project-structure</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">guides\best-practices.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">projet</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\glossary.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">prompting</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\claude-structured-reasoning.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">query</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\sqlite.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">quick-start</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\documentation.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">quickstart</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">README.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">read</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\filesystem.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">readme</span></td>
+      <td>2</td>
+      <td class="kw-files"><span class="file-ref">README.md</span> <span class="file-ref">guides\best-practices.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">reasoning-patterns</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\claude-structured-reasoning.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">regex</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\filesystem.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">scaffolding</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">guides\project-setup-process.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">schema</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\sqlite.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">separation-of-concerns</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">guides\best-practices.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">session</span></td>
+      <td>4</td>
+      <td class="kw-files"><span class="file-ref">Claude.md</span> <span class="file-ref">GLOSSARY.md</span> <span class="file-ref">conventions\todo.md</span> <span class="file-ref">workflows\session-startup.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">setup</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">Claude.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">SQL</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\sqlite.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">sqlite</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\sqlite.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">standards</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">guides\guide-maintenance.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">startup</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">workflows\session-startup.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">structure</span></td>
+      <td>2</td>
+      <td class="kw-files"><span class="file-ref">PROJECT.md</span> <span class="file-ref">README.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">structured-reasoning</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\claude-structured-reasoning.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">suivi</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\todo.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">taches</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\todo.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">terminologie</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\glossary.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">thinking-tags</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\claude-structured-reasoning.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">titres</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\documentation.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">TOC</span></td>
+      <td>2</td>
+      <td class="kw-files"><span class="file-ref">conventions\documentation.md</span> <span class="file-ref">guides\guide-maintenance.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">todo</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\todo.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">traceability</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">guides\guide-maintenance.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">trap</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\commwise-modals.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">verification</span></td>
+      <td>2</td>
+      <td class="kw-files"><span class="file-ref">conventions\claude-structured-reasoning.md</span> <span class="file-ref">guides\audit-process.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">viewport</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\commwise-layout.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">visibility</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\commwise-modals.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">visible</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\commwise-modals.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">VS-Code</span></td>
+      <td>1</td>
+      <td class="kw-files"><span class="file-ref">conventions\documentation.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">workflow</span></td>
+      <td>3</td>
+      <td class="kw-files"><span class="file-ref">GLOSSARY.md</span> <span class="file-ref">guides\project-setup-process.md</span> <span class="file-ref">workflows\session-startup.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">workflows</span></td>
+      <td>2</td>
+      <td class="kw-files"><span class="file-ref">INDEX.md</span> <span class="file-ref">PROJECT.md</span></td>
+    </tr>
+    <tr>
+      <td><span class="kw-tag">write</span></td>
+      <td>2</td>
+      <td class="kw-files"><span class="file-ref">conventions\filesystem.md</span> <span class="file-ref">conventions\sqlite.md</span></td>
+    </tr></tbody></table></div>
+</section>
+
+<section>
+  <h2>Conformant Files <span class="count">(20 files)</span></h2>
+  <div class="table-wrap"><table><thead><tr><th>File</th><th>KW count</th><th>Keywords</th></tr></thead><tbody>
+    <tr>
+      <td class="file-path">Claude.md</td>
+      <td>7</td>
+      <td class="kw-cell"><span class="kw-tag">claude</span> <span class="kw-tag">instructions</span> <span class="kw-tag">session</span> <span class="kw-tag">knowledge-base</span> <span class="kw-tag">setup</span> <span class="kw-tag">configuration</span> <span class="kw-tag">---</span></td>
+    </tr>
+    <tr>
+      <td class="file-path">conventions\claude-chrome-mcp.md</td>
+      <td>10</td>
+      <td class="kw-cell"><span class="kw-tag">Chrome</span> <span class="kw-tag">MCP</span> <span class="kw-tag">browser</span> <span class="kw-tag">DOM</span> <span class="kw-tag">debug</span> <span class="kw-tag">javascript</span> <span class="kw-tag">inspect</span> <span class="kw-tag">layout</span> <span class="kw-tag">conventions</span> <span class="kw-tag">---</span></td>
+    </tr>
+    <tr>
+      <td class="file-path">conventions\claude-structured-reasoning.md</td>
+      <td>11</td>
+      <td class="kw-cell"><span class="kw-tag">structured-reasoning</span> <span class="kw-tag">thinking-tags</span> <span class="kw-tag">chain-of-thought</span> <span class="kw-tag">prompting</span> <span class="kw-tag">clarity</span> <span class="kw-tag">reasoning-patterns</span> <span class="kw-tag">analysis</span> <span class="kw-tag">decomposition</span> <span class="kw-tag">constraints</span> <span class="kw-tag">verification</span> <span class="kw-tag">---</span></td>
+    </tr>
+    <tr>
+      <td class="file-path">conventions\commwise-layout.md</td>
+      <td>9</td>
+      <td class="kw-cell"><span class="kw-tag">CommWise</span> <span class="kw-tag">flex</span> <span class="kw-tag">layout</span> <span class="kw-tag">max-height</span> <span class="kw-tag">viewport</span> <span class="kw-tag">CSS</span> <span class="kw-tag">override</span> <span class="kw-tag">conventions</span> <span class="kw-tag">---</span></td>
+    </tr>
+    <tr>
+      <td class="file-path">conventions\commwise-modals.md</td>
+      <td>14</td>
+      <td class="kw-cell"><span class="kw-tag">CommWise</span> <span class="kw-tag">modal</span> <span class="kw-tag">overlay</span> <span class="kw-tag">dds-hidden</span> <span class="kw-tag">visible</span> <span class="kw-tag">display</span> <span class="kw-tag">opacity</span> <span class="kw-tag">visibility</span> <span class="kw-tag">disabled</span> <span class="kw-tag">button</span> <span class="kw-tag">CSS</span> <span class="kw-tag">override</span> <span class="kw-tag">trap</span> <span class="kw-tag">---</span></td>
+    </tr>
+    <tr>
+      <td class="file-path">conventions\documentation.md</td>
+      <td>12</td>
+      <td class="kw-cell"><span class="kw-tag">documentation</span> <span class="kw-tag">markdown</span> <span class="kw-tag">titres</span> <span class="kw-tag">ancres</span> <span class="kw-tag">TOC</span> <span class="kw-tag">index</span> <span class="kw-tag">keywords</span> <span class="kw-tag">changelog</span> <span class="kw-tag">quick-start</span> <span class="kw-tag">convention</span> <span class="kw-tag">navigation</span> <span class="kw-tag">VS-Code</span></td>
+    </tr>
+    <tr>
+      <td class="file-path">conventions\filesystem.md</td>
+      <td>10</td>
+      <td class="kw-cell"><span class="kw-tag">filesystem</span> <span class="kw-tag">MCP</span> <span class="kw-tag">read</span> <span class="kw-tag">write</span> <span class="kw-tag">copy</span> <span class="kw-tag">node</span> <span class="kw-tag">regex</span> <span class="kw-tag">files</span> <span class="kw-tag">conventions</span> <span class="kw-tag">---</span></td>
+    </tr>
+    <tr>
+      <td class="file-path">conventions\glossary.md</td>
+      <td>8</td>
+      <td class="kw-cell"><span class="kw-tag">glossaire</span> <span class="kw-tag">glossary</span> <span class="kw-tag">terminologie</span> <span class="kw-tag">domaines</span> <span class="kw-tag">definitions</span> <span class="kw-tag">projet</span> <span class="kw-tag">conformite</span> <span class="kw-tag">audit</span></td>
+    </tr>
+    <tr>
+      <td class="file-path">conventions\indexeddb-file-protocol.md</td>
+      <td>9</td>
+      <td class="kw-cell"><span class="kw-tag">indexedDB</span> <span class="kw-tag">localStorage</span> <span class="kw-tag">file-protocol</span> <span class="kw-tag">browser-storage</span> <span class="kw-tag">persistence</span> <span class="kw-tag">patch</span> <span class="kw-tag">HTML</span> <span class="kw-tag">AfrSCM</span> <span class="kw-tag">---</span></td>
+    </tr>
+    <tr>
+      <td class="file-path">conventions\sqlite.md</td>
+      <td>10</td>
+      <td class="kw-cell"><span class="kw-tag">sqlite</span> <span class="kw-tag">MCP</span> <span class="kw-tag">SQL</span> <span class="kw-tag">database</span> <span class="kw-tag">schema</span> <span class="kw-tag">write</span> <span class="kw-tag">query</span> <span class="kw-tag">conventions</span> <span class="kw-tag">DDL</span> <span class="kw-tag">---</span></td>
+    </tr>
+    <tr>
+      <td class="file-path">conventions\todo.md</td>
+      <td>8</td>
+      <td class="kw-cell"><span class="kw-tag">todo</span> <span class="kw-tag">backlog</span> <span class="kw-tag">taches</span> <span class="kw-tag">idees</span> <span class="kw-tag">suivi</span> <span class="kw-tag">priorite</span> <span class="kw-tag">session</span> <span class="kw-tag">archivage</span></td>
+    </tr>
+    <tr>
+      <td class="file-path">GLOSSARY.md</td>
+      <td>10</td>
+      <td class="kw-cell"><span class="kw-tag">glossary</span> <span class="kw-tag">knowledge-base</span> <span class="kw-tag">convention</span> <span class="kw-tag">workflow</span> <span class="kw-tag">guide</span> <span class="kw-tag">session</span> <span class="kw-tag">audit</span> <span class="kw-tag">markdown</span> <span class="kw-tag">domain</span> <span class="kw-tag">best-practice</span></td>
+    </tr>
+    <tr>
+      <td class="file-path">guides\audit-process.md</td>
+      <td>12</td>
+      <td class="kw-cell"><span class="kw-tag">audit</span> <span class="kw-tag">verification</span> <span class="kw-tag">conformance</span> <span class="kw-tag">process</span> <span class="kw-tag">methodology</span> <span class="kw-tag">neutral</span> <span class="kw-tag">best-practices</span> <span class="kw-tag">project</span> <span class="kw-tag">exhaustive</span> <span class="kw-tag">deviations</span> <span class="kw-tag">pragmatic</span> <span class="kw-tag">---</span></td>
+    </tr>
+    <tr>
+      <td class="file-path">guides\best-practices.md</td>
+      <td>14</td>
+      <td class="kw-cell"><span class="kw-tag">best-practices</span> <span class="kw-tag">project-structure</span> <span class="kw-tag">instructions</span> <span class="kw-tag">conventions</span> <span class="kw-tag">context</span> <span class="kw-tag">separation-of-concerns</span> <span class="kw-tag">clarity</span> <span class="kw-tag">audit</span> <span class="kw-tag">discoverability</span> <span class="kw-tag">README</span> <span class="kw-tag">documentation</span> <span class="kw-tag">navigation</span> <span class="kw-tag">keywords</span> <span class="kw-tag">---</span></td>
+    </tr>
+    <tr>
+      <td class="file-path">guides\guide-maintenance.md</td>
+      <td>10</td>
+      <td class="kw-cell"><span class="kw-tag">maintenance</span> <span class="kw-tag">guides</span> <span class="kw-tag">documentation</span> <span class="kw-tag">changelog</span> <span class="kw-tag">TOC</span> <span class="kw-tag">discoverability</span> <span class="kw-tag">traceability</span> <span class="kw-tag">standards</span> <span class="kw-tag">consistency</span> <span class="kw-tag">---</span></td>
+    </tr>
+    <tr>
+      <td class="file-path">guides\project-setup-process.md</td>
+      <td>10</td>
+      <td class="kw-cell"><span class="kw-tag">project-setup</span> <span class="kw-tag">process</span> <span class="kw-tag">initialization</span> <span class="kw-tag">configuration</span> <span class="kw-tag">scaffolding</span> <span class="kw-tag">best-practices</span> <span class="kw-tag">workflow</span> <span class="kw-tag">new-project</span> <span class="kw-tag">checklist</span> <span class="kw-tag">claude-assisted</span></td>
+    </tr>
+    <tr>
+      <td class="file-path">INDEX.md</td>
+      <td>8</td>
+      <td class="kw-cell"><span class="kw-tag">index</span> <span class="kw-tag">conventions</span> <span class="kw-tag">workflows</span> <span class="kw-tag">guides</span> <span class="kw-tag">navigation</span> <span class="kw-tag">discoverability</span> <span class="kw-tag">knowledge-base</span> <span class="kw-tag">---</span></td>
+    </tr>
+    <tr>
+      <td class="file-path">PROJECT.md</td>
+      <td>9</td>
+      <td class="kw-cell"><span class="kw-tag">project</span> <span class="kw-tag">knowledge-base</span> <span class="kw-tag">conventions</span> <span class="kw-tag">workflows</span> <span class="kw-tag">guides</span> <span class="kw-tag">structure</span> <span class="kw-tag">audit</span> <span class="kw-tag">metadata</span> <span class="kw-tag">---</span></td>
+    </tr>
+    <tr>
+      <td class="file-path">README.md</td>
+      <td>8</td>
+      <td class="kw-cell"><span class="kw-tag">readme</span> <span class="kw-tag">navigation</span> <span class="kw-tag">knowledge-base</span> <span class="kw-tag">human</span> <span class="kw-tag">quickstart</span> <span class="kw-tag">architecture</span> <span class="kw-tag">structure</span> <span class="kw-tag">---</span></td>
+    </tr>
+    <tr>
+      <td class="file-path">workflows\session-startup.md</td>
+      <td>8</td>
+      <td class="kw-cell"><span class="kw-tag">startup</span> <span class="kw-tag">initialization</span> <span class="kw-tag">session</span> <span class="kw-tag">workflow</span> <span class="kw-tag">conventions</span> <span class="kw-tag">procedure</span> <span class="kw-tag">entry-point</span> <span class="kw-tag">---</span></td>
+    </tr></tbody></table></div>
+</section>
+
+<section>
+  <h2>Non-conformant Files <span class="count">(1 files)</span></h2>
+  <div class="table-wrap"><table><thead><tr><th>File</th><th>Issues</th></tr></thead><tbody>
+    <tr>
+      <td class="file-path">TODO.md</td>
+      <td><span class="issue">Missing ## Quick Start</span> <span class="issue">Missing ## Keywords</span> <span class="issue">Missing ## Index</span> <span class="issue">Missing ## Changelog</span></td>
+    </tr></tbody></table></div>
+</section>
+
+<script>
+  function filterKeywords() {
+    const q = document.getElementById('kw-search').value.toLowerCase();
+    document.querySelectorAll('tbody tr').forEach(row => {
+      row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
+    });
+  }
+</script>
+</body>
+</html>
