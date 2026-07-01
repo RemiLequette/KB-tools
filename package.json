@@ -4,8 +4,10 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "better-sqlite3": "^12.11.1",
-    "marked": "^4.3.0"
+    "marked": "^4.3.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "vitest": "^1.6.0"
