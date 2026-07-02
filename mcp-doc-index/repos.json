@@ -3,5 +3,15 @@
     "name": "kb",
     "root": "G:\\My Drive\\000-Projects\\100-RemiProVault\\KB",
     "db": "../data/kb.db"
+  },
+  {
+    "name": "ddscope",
+    "root": "C:\\Users\\RemiLequette\\OneDrive\\Tech4Best\\100-RemiT4BVault\\DDScope",
+    "db": "../data/ddscope.db"
+  },
+  {
+    "name": "commwise",
+    "root": "C:\\Users\\RemiLequette\\OneDrive\\Tech4Best\\100-RemiT4BVault\\Commwise",
+    "db": "../data/commwise.db"
   }
 ]
