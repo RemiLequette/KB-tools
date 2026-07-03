@@ -1,0 +1,8 @@
+[
+  {
+    "name": "ddscope-code",
+    "root": "C:\\Users\\RemiLequette\\Development\\with-ai\\ddscope",
+    "db": "../data/ddscope-code.db",
+    "extensions": [".js", ".html", ".css"]
+  }
+]

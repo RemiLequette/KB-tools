@@ -129,6 +129,15 @@ describe('writeSection', () => {
     fs.mkdirSync(path.dirname(dest), { recursive: true });
     fs.copyFileSync(path.join(FIXTURES, 'conventions', 'alpha.md'), dest);
 
+    // The alpha fixture intentionally has no ## Load when — used elsewhere to test
+    // the load_when=null case (see indexer.test.js). conventions/documentation.md
+    // makes ## Load when mandatory, so writeSection's conformance gate (getIssues)
+    // would reject every write below unless the sandboxed *copy* has it. Inject it
+    // here, in the copy only — the fixture on disk stays untouched.
+    const withLoadWhen = fs.readFileSync(dest, 'utf-8')
+      .replace('\n## Why', '\n## Load when\nWorking with alpha things\n\n## Why');
+    fs.writeFileSync(dest, withLoadWhen);
+
     // Point repos.json at the sandbox repo instead of the read-only fixtures.
     reposJsonPath = path.join(SANDBOX, 'repos-writable.json');
     fs.writeFileSync(reposJsonPath, JSON.stringify([
