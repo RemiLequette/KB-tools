@@ -5,17 +5,9 @@
  * No business logic — reads, writes, deletes, and lists files only.
  *
  * Also exposes:
- *   POST /forge        — proxy to the Forge MCP server (v2)
- *   POST /forge-reload — hot-reload Forge tool + format registries
  *   POST /exec         — start a process session or send stdin input
  *   GET  /exec/stream  — SSE stream of stdout/stderr for a session
  *   DELETE /exec       — terminate a session
- *
- * Forge v2 uses McpServer from forge/src/mcp-server.js.
- * dispatch(tool, args) routes calls to the registered tool handlers.
- * Hot-reload rebuilds McpServer from forge-tools.json + forge-formats.json
- * — handler JS modules are NOT reloaded (ESM cache), only JSON config changes
- * are picked up.
  *
  * Exec sessions are managed by tools/lib/exec-manager.js.
  * See conventions/local-server.md [section Session model] for the full spec.
@@ -26,11 +18,11 @@
  * See conventions/local-server.md for the full specification.
  */
 
-const http = require('http');
-const path = require('path');
-const url  = require('url');
-const core = require('./lib/server-core');
-const exec = require('./lib/exec-manager');
+import http from 'http';
+import path from 'path';
+import url  from 'url';
+import * as core from './lib/server-core.js';
+import * as exec from './lib/exec-manager.js';
 
 // ---------------------------------------------------------------------------
 // Configuration from CLI arguments
@@ -101,70 +93,6 @@ function readBody(req) {
 }
 
 // ---------------------------------------------------------------------------
-// Forge proxy (v2) — McpServer from forge/src/mcp-server.js
-// forgeServer = McpServer instance, replaced on every reload.
-// ---------------------------------------------------------------------------
-
-let forgeServer    = null; // McpServer instance
-let forgeMcpMod    = null; // { McpServer } from forge/src/mcp-server.js
-let forgeToolsPath = null; // absolute path to forge-tools.json
-
-async function loadForgeMod() {
-  if (forgeMcpMod) return;
-  const forgeDir    = path.resolve(__dirname, 'forge');
-  const mcpServerUrl = 'file:///' + path.join(forgeDir, 'src', 'mcp-server.js').replace(/\\/g, '/');
-  forgeMcpMod    = await import(mcpServerUrl);
-  forgeToolsPath = path.join(forgeDir, 'forge-tools.json');
-}
-
-async function reloadForge() {
-  const fs = require('fs');
-  await loadForgeMod();
-
-  if (!fs.existsSync(forgeToolsPath)) {
-    throw new Error(`forge-tools.json not found at ${forgeToolsPath}`);
-  }
-
-  const server = new forgeMcpMod.McpServer();
-
-  // Build context — load registries the same way startMcpServer() does
-  const forgeDir      = path.dirname(forgeToolsPath);
-  const forgeConfigUrl = 'file:///' + path.join(forgeDir, 'forge.config.json').replace(/\\/g, '/');
-  const rootRegUrl     = 'file:///' + path.join(forgeDir, 'src', 'root-registry.js').replace(/\\/g, '/');
-  const fmtRegUrl      = 'file:///' + path.join(forgeDir, 'src', 'format-registry.js').replace(/\\/g, '/');
-
-  const [{ RootRegistry }, { FormatRegistry }] = await Promise.all([
-    import(rootRegUrl),
-    import(fmtRegUrl),
-  ]);
-
-  const forgeConfig  = JSON.parse(fs.readFileSync(path.join(forgeDir, 'forge.config.json'), 'utf8'));
-  const rootRegistry = new RootRegistry();
-  await rootRegistry.load(forgeConfig.roots);
-
-  const formatRegistry = new FormatRegistry();
-  const formatsPath    = path.join(forgeDir, 'forge-formats.json');
-  if (fs.existsSync(formatsPath)) await formatRegistry.load(formatsPath);
-
-  await server.loadTools(forgeToolsPath, { rootRegistry, formatRegistry });
-
-  forgeServer = server;
-
-  const roots = forgeConfig.roots.map(r => r.name);
-  const tools = server.toolNames();
-  return { roots, tools };
-}
-
-async function initForge() {
-  try {
-    const { roots, tools } = await reloadForge();
-    console.log(`[forge] Forge v2 ready — ${roots.length} root(s): ${roots.join(', ')} — ${tools.length} tool(s)`);
-  } catch (err) {
-    console.warn('[forge] Could not initialise Forge proxy: ' + err.message);
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Router
 // ---------------------------------------------------------------------------
 
@@ -183,41 +111,6 @@ const server = http.createServer(async (req, res) => {
   // GET /ping
   if (method === 'GET' && pathname === '/ping') {
     return send(res, 200, { ok: true });
-  }
-
-  // POST /forge — Forge v2 tool proxy
-  if (method === 'POST' && pathname === '/forge') {
-    if (!forgeServer) {
-      return send(res, 503, { error: 'Forge proxy not available' });
-    }
-    let body;
-    try {
-      body = JSON.parse(await readBody(req));
-    } catch {
-      return send(res, 400, { error: 'Invalid JSON body' });
-    }
-    const { tool, args: toolArgs = {} } = body;
-    if (!tool) {
-      return send(res, 400, { error: 'Missing field: tool' });
-    }
-    try {
-      const result = await forgeServer.dispatch(tool, toolArgs);
-      return send(res, 200, result);
-    } catch (err) {
-      return send(res, 500, { error: err.message });
-    }
-  }
-
-  // POST /forge-reload — hot-reload Forge tool + format registries
-  if (method === 'POST' && pathname === '/forge-reload') {
-    try {
-      const { roots, tools } = await reloadForge();
-      console.log(`[forge] Reloaded — ${roots.length} root(s), ${tools.length} tool(s)`);
-      return send(res, 200, { ok: true, roots, tools });
-    } catch (err) {
-      console.warn('[forge] Reload failed: ' + err.message);
-      return send(res, 500, { error: err.message });
-    }
   }
 
   // ---------------------------------------------------------------------------
@@ -353,8 +246,6 @@ server.listen(PORT, '127.0.0.1', async () => {
   console.log('');
   console.log('Ctrl+C to stop.');
   console.log('');
-
-  await initForge();
 });
 
 server.on('error', err => {
