@@ -12,7 +12,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { statSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { openDb, getDocumentMtime, searchDocuments } from '../lib/code-index-db.js';
+import { openDb, getDocumentMtime, searchDocuments, listDocumentPaths } from '../lib/code-index-db.js';
 import { indexFile, indexRepo } from '../lib/code-indexer.js';
 
 const __dirname  = path.dirname(fileURLToPath(import.meta.url));
@@ -110,5 +110,39 @@ describe('indexRepo', () => {
     indexRepo(db, 'other-repo', FIXTURES, EXTENSIONS);
     const count = db.prepare("SELECT COUNT(*) AS n FROM documents WHERE repo='ddscope-code'").get().n;
     expect(count).toBe(0);
+  });
+
+  // @convention conventions/mcp-code-index.md [## What — Model > Reindexing]
+  it('prunes a document whose file no longer exists on disk', () => {
+    const goneePath = path.join(FIXTURES, 'src', 'gone.js');
+    db.prepare('INSERT INTO documents (repo, file_path, extension, mtime) VALUES (?,?,?,?)')
+      .run('ddscope-code', goneePath, '.js', 1);
+
+    indexRepo(db, 'ddscope-code', FIXTURES, EXTENSIONS);
+
+    expect(listDocumentPaths(db, 'ddscope-code')).not.toContain(goneePath);
+  });
+
+  it('leaves documents for files still on disk untouched by pruning', () => {
+    indexRepo(db, 'ddscope-code', FIXTURES, EXTENSIONS);
+    const before = listDocumentPaths(db, 'ddscope-code').sort();
+
+    indexRepo(db, 'ddscope-code', FIXTURES, EXTENSIONS);
+    const after = listDocumentPaths(db, 'ddscope-code').sort();
+
+    expect(after).toEqual(before);
+  });
+
+  it('a pruned file no longer appears in search results', () => {
+    const goneePath = path.join(FIXTURES, 'src', 'gone.js');
+    db.prepare('INSERT INTO documents (repo, file_path, extension, mtime) VALUES (?,?,?,?)')
+      .run('ddscope-code', goneePath, '.js', 1);
+    db.prepare('INSERT INTO documents_fts (rowid, content, doc_id) VALUES (last_insert_rowid(), ?, last_insert_rowid())')
+      .run('zzzneedleuniquemarker');
+
+    indexRepo(db, 'ddscope-code', FIXTURES, EXTENSIONS);
+
+    const hits = searchDocuments(db, 'zzzneedleuniquemarker');
+    expect(hits).toHaveLength(0);
   });
 });

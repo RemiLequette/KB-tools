@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { openDb, upsertDocument, getDocumentMtime, searchDocuments } from '../lib/code-index-db.js';
+import { openDb, upsertDocument, getDocumentMtime, searchDocuments, deleteDocument, listDocumentPaths } from '../lib/code-index-db.js';
 
 // ---------------------------------------------------------------------------
 // Shared fixtures
@@ -94,6 +94,68 @@ describe('upsertDocument', () => {
     upsertDocument(db, BAR.repo, BAR.filePath, BAR.extension, BAR.mtime, BAR.content);
     const hits = searchDocuments(db, 'fragment');
     expect(hits.every(h => h.file_path === BAR.filePath)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// deleteDocument
+// ---------------------------------------------------------------------------
+
+describe('deleteDocument', () => {
+  let db;
+  beforeEach(() => { db = openDb(':memory:'); });
+  afterEach(() => db.close());
+
+  it('removes the document row', () => {
+    upsertDocument(db, FOO.repo, FOO.filePath, FOO.extension, FOO.mtime, FOO.content);
+    deleteDocument(db, FOO.repo, FOO.filePath);
+    const row = db.prepare('SELECT * FROM documents WHERE repo=? AND file_path=?')
+                  .get(FOO.repo, FOO.filePath);
+    expect(row).toBeUndefined();
+  });
+
+  it('removes the document from search results', () => {
+    upsertDocument(db, FOO.repo, FOO.filePath, FOO.extension, FOO.mtime, FOO.content);
+    deleteDocument(db, FOO.repo, FOO.filePath);
+    const hits = searchDocuments(db, 'hello');
+    expect(hits).toHaveLength(0);
+  });
+
+  it('does not affect other documents', () => {
+    upsertDocument(db, FOO.repo, FOO.filePath, FOO.extension, FOO.mtime, FOO.content);
+    upsertDocument(db, BAR.repo, BAR.filePath, BAR.extension, BAR.mtime, BAR.content);
+    deleteDocument(db, FOO.repo, FOO.filePath);
+    const hits = searchDocuments(db, 'fragment');
+    expect(hits).toHaveLength(1);
+  });
+
+  it('is a no-op when the document does not exist', () => {
+    expect(() => deleteDocument(db, 'ddscope-code', 'unknown.js')).not.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// listDocumentPaths
+// ---------------------------------------------------------------------------
+
+describe('listDocumentPaths', () => {
+  let db;
+  beforeEach(() => { db = openDb(':memory:'); });
+  afterEach(() => db.close());
+
+  it('returns an empty array when no documents are indexed', () => {
+    expect(listDocumentPaths(db, 'ddscope-code')).toEqual([]);
+  });
+
+  it('returns the file_path of every indexed document for the repo', () => {
+    upsertDocument(db, FOO.repo, FOO.filePath, FOO.extension, FOO.mtime, FOO.content);
+    upsertDocument(db, BAR.repo, BAR.filePath, BAR.extension, BAR.mtime, BAR.content);
+    expect(listDocumentPaths(db, 'ddscope-code').sort()).toEqual([BAR.filePath, FOO.filePath].sort());
+  });
+
+  it('is scoped by repo', () => {
+    upsertDocument(db, 'ddscope-code', FOO.filePath, FOO.extension, FOO.mtime, FOO.content);
+    expect(listDocumentPaths(db, 'other-repo')).toEqual([]);
   });
 });
 
