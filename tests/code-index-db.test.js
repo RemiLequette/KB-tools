@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { openDb, upsertDocument, getDocumentMtime, searchDocuments, deleteDocument, listDocumentPaths } from '../lib/code-index-db.js';
+import { openDb, upsertDocument, getDocumentMtime, searchDocuments, deleteDocument, listDocumentPaths, sanitizeFtsQuery } from '../lib/code-index-db.js';
 
 // ---------------------------------------------------------------------------
 // Shared fixtures
@@ -190,6 +190,32 @@ describe('getDocumentMtime', () => {
 });
 
 // ---------------------------------------------------------------------------
+// sanitizeFtsQuery
+// ---------------------------------------------------------------------------
+
+describe('sanitizeFtsQuery', () => {
+  it('wraps a single bareword token in quotes', () => {
+    expect(sanitizeFtsQuery('hello')).toBe('"hello"');
+  });
+
+  it('wraps each space-separated token independently', () => {
+    expect(sanitizeFtsQuery('DDS_CMD dispatch')).toBe('"DDS_CMD" "dispatch"');
+  });
+
+  it('preserves hyphens inside a quoted token', () => {
+    expect(sanitizeFtsQuery('dds-btn-elements')).toBe('"dds-btn-elements"');
+  });
+
+  it('escapes double quotes by doubling them', () => {
+    expect(sanitizeFtsQuery('foo"bar')).toBe('"foo""bar"');
+  });
+
+  it('collapses repeated whitespace between tokens', () => {
+    expect(sanitizeFtsQuery('foo   bar')).toBe('"foo" "bar"');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // searchDocuments
 // ---------------------------------------------------------------------------
 
@@ -230,5 +256,16 @@ describe('searchDocuments', () => {
   it('returns empty array when repo filter excludes all matches', () => {
     const hits = searchDocuments(db, 'hello', 'other-repo');
     expect(hits).toHaveLength(0);
+  });
+
+  // @convention conventions/mcp-code-index.md [## How — Implementation > MCP tools]
+  it('finds a document by a hyphenated identifier without throwing', () => {
+    expect(() => searchDocuments(db, 'dds-btn-elements')).not.toThrow();
+  });
+
+  it('matches content containing the literal hyphenated identifier', () => {
+    upsertDocument(db, 'ddscope-code', 'fragments/app-shell.html', '.html', 1, '<button id="dds-btn-elements">Elements</button>');
+    const hits = searchDocuments(db, 'dds-btn-elements');
+    expect(hits.some(h => h.file_path === 'fragments/app-shell.html')).toBe(true);
   });
 });
