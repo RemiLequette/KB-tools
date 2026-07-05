@@ -205,4 +205,18 @@ describe('reindex', () => {
     const results = reindex(ctx, {});
     expect(results.map(r => r.repo)).toContain('kb');
   });
+
+  // @convention conventions/mcp-doc-index.md [## What — Model > Exclude patterns]
+  it('respects the repo exclude patterns from repos.json', () => {
+    reposJsonPath = path.join(SANDBOX, 'repos.json');
+    fs.writeFileSync(reposJsonPath, JSON.stringify([
+      { name: 'kb', root: FIXTURES, db: path.join(SANDBOX, 'kb.db'), exclude: ['**/generated/**'] },
+    ]));
+    ctx.close();
+    ctx = createContext(reposJsonPath);
+
+    reindex(ctx, { repo: 'kb' });
+    const result = search(ctx, { query: 'generated', repo: 'kb' });
+    expect(result.section_matches.some(m => m.file_path.includes('output.md'))).toBe(false);
+  });
 });

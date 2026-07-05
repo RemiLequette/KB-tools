@@ -105,8 +105,8 @@ describe('indexRepo', () => {
   it('indexes all .md files in the repo directory tree', () => {
     indexRepo(db, 'kb', FIXTURES);
     const count = db.prepare('SELECT COUNT(*) AS n FROM documents WHERE repo=?').get('kb').n;
-    // fixtures/: alpha.md, beta.md, non-conformant.md = 3 files
-    expect(count).toBe(3);
+    // fixtures/: alpha.md, beta.md, non-conformant.md, generated/output.md = 4 files
+    expect(count).toBe(4);
   });
 
   it('makes all indexed files searchable', () => {
@@ -120,5 +120,24 @@ describe('indexRepo', () => {
     indexRepo(db, 'my-project', FIXTURES);
     const count = db.prepare("SELECT COUNT(*) AS n FROM documents WHERE repo='kb'").get().n;
     expect(count).toBe(0);
+  });
+
+  // @convention conventions/mcp-doc-index.md [## What — Model > Exclude patterns]
+  it('exclude — skips .md files matching a glob pattern', () => {
+    indexRepo(db, 'kb', FIXTURES, ['**/generated/**']);
+    const row = db.prepare('SELECT * FROM documents WHERE file_path LIKE ?').get('%output.md');
+    expect(row).toBeUndefined();
+  });
+
+  it('exclude — leaves non-matching files indexed', () => {
+    indexRepo(db, 'kb', FIXTURES, ['**/generated/**']);
+    const count = db.prepare('SELECT COUNT(*) AS n FROM documents WHERE repo=?').get('kb').n;
+    expect(count).toBe(3);
+  });
+
+  it('exclude — omitted argument indexes everything (backward compatible)', () => {
+    indexRepo(db, 'kb', FIXTURES);
+    const count = db.prepare('SELECT COUNT(*) AS n FROM documents WHERE repo=?').get('kb').n;
+    expect(count).toBe(4);
   });
 });

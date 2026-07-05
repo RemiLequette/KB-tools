@@ -91,4 +91,18 @@ describe('reindex', () => {
     const results = reindex(ctx, {});
     expect(results.map(r => r.repo)).toContain('ddscope-code');
   });
+
+  // @convention conventions/mcp-code-index.md [## What — Model > Exclude patterns]
+  it('respects the repo exclude patterns from repos.json', () => {
+    reposJsonPath = path.join(SANDBOX, 'repos.json');
+    fs.writeFileSync(reposJsonPath, JSON.stringify([
+      { name: 'ddscope-code', root: FIXTURES, db: path.join(SANDBOX, 'ddscope-code.db'), extensions: ['.js', '.html', '.css'], exclude: ['**/dist/**'] },
+    ]));
+    ctx.close();
+    ctx = createContext(reposJsonPath);
+
+    reindex(ctx, { repo: 'ddscope-code' });
+    const result = search(ctx, { query: 'generated', repo: 'ddscope-code' });
+    expect(result.matches.some(m => m.file_path.includes('bundle.generated.js'))).toBe(false);
+  });
 });

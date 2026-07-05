@@ -90,8 +90,8 @@ describe('indexRepo', () => {
   it('indexes all files matching the given extensions', () => {
     indexRepo(db, 'ddscope-code', FIXTURES, EXTENSIONS);
     const count = db.prepare('SELECT COUNT(*) AS n FROM documents WHERE repo=?').get('ddscope-code').n;
-    // fixtures/: foo.js, bar.html, baz.css = 3 files (readme.txt excluded)
-    expect(count).toBe(3);
+    // fixtures/: foo.js, bar.html, baz.css, dist/bundle.generated.js = 4 files (readme.txt excluded)
+    expect(count).toBe(4);
   });
 
   it('excludes files whose extension is not in the given list', () => {
@@ -144,5 +144,24 @@ describe('indexRepo', () => {
 
     const hits = searchDocuments(db, 'zzzneedleuniquemarker');
     expect(hits).toHaveLength(0);
+  });
+
+  // @convention conventions/mcp-code-index.md [## What — Model > Exclude patterns]
+  it('exclude — skips files matching a glob pattern', () => {
+    indexRepo(db, 'ddscope-code', FIXTURES, EXTENSIONS, ['**/dist/**']);
+    const row = db.prepare('SELECT * FROM documents WHERE file_path LIKE ?').get('%bundle.generated.js');
+    expect(row).toBeUndefined();
+  });
+
+  it('exclude — leaves non-matching files indexed', () => {
+    indexRepo(db, 'ddscope-code', FIXTURES, EXTENSIONS, ['**/dist/**']);
+    const count = db.prepare('SELECT COUNT(*) AS n FROM documents WHERE repo=?').get('ddscope-code').n;
+    expect(count).toBe(3);
+  });
+
+  it('exclude — omitted argument indexes everything (backward compatible)', () => {
+    indexRepo(db, 'ddscope-code', FIXTURES, EXTENSIONS);
+    const count = db.prepare('SELECT COUNT(*) AS n FROM documents WHERE repo=?').get('ddscope-code').n;
+    expect(count).toBe(4);
   });
 });

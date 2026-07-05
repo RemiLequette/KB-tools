@@ -11,6 +11,7 @@ export default defineConfig({
       'tests/code-index-db.test.js',
       'tests/code-indexer.test.js',
       'tests/mcp-code-index-tools.test.js',
+      'tests/fs-scan.test.js',
     ],
     exclude: ['tests/forge/**'],
   },
