@@ -24,15 +24,12 @@
 
 import fs   from 'fs';
 import path from 'path';
-import { createRequire } from 'module';
 
 import { openDb, searchSections, searchDocumentMeta, listTriggers as dbListTriggers } from '../lib/index-db.js';
 import { indexFile, indexRepo, refreshRepo } from '../lib/indexer.js';
 import { withLock } from '../lib/lock.js';
 import { loadRepos, findRepo } from '../lib/repo-config.js';
-
-const require = createRequire(import.meta.url);
-const md = require('../lib/md-parser.cjs');
+import * as md from '../lib/md-parser.js';
 
 // Mirrors md-parser.js REQUIRED_SECTIONS — see "Not yet in references" above.
 const REQUIRED_SECTIONS = ['Quick Start', 'Keywords', 'Index', 'Changelog'];
@@ -57,7 +54,7 @@ function fail(code, message) {
  * one db handle per repo, cached for reuse.
  *
  * @param {string} reposJsonPath - Absolute path to repos.json.
- * @returns {{ repos: {name:string,root:string,db:string}[], getDb: (repoName:string) => import('better-sqlite3').Database, close: () => void }}
+ * @returns {{ repos: {name:string,root:string,db:string,exclude?:string[]}[], getDb: (repoName:string) => import('better-sqlite3').Database, close: () => void }}
  */
 export function createContext(reposJsonPath) {
   const repos = loadRepos(reposJsonPath);
@@ -243,7 +240,7 @@ export function reindex(ctx, { repo } = {}) {
   const results = [];
   for (const r of targetRepos) {
     const db = ctx.getDb(r.name);
-    indexRepo(db, r.name, r.root);
+    indexRepo(db, r.name, r.root, r.exclude);
     results.push({ repo: r.name, indexed: true });
   }
   return results;

@@ -46,7 +46,7 @@ function fail(code, message) {
  * one db handle per repo, cached for reuse.
  *
  * @param {string} reposJsonPath - Absolute path to repos.json.
- * @returns {{ repos: {name:string,root:string,db:string,extensions:string[]}[], getDb: (repoName:string) => import('better-sqlite3').Database, close: () => void }}
+ * @returns {{ repos: {name:string,root:string,db:string,extensions:string[],exclude?:string[]}[], getDb: (repoName:string) => import('better-sqlite3').Database, close: () => void }}
  */
 export function createContext(reposJsonPath) {
   const repos = loadRepos(reposJsonPath);
@@ -114,7 +114,7 @@ export function reindex(ctx, { repo } = {}) {
   const results = [];
   for (const r of targetRepos) {
     const db = ctx.getDb(r.name);
-    indexRepo(db, r.name, r.root, r.extensions);
+    indexRepo(db, r.name, r.root, r.extensions, r.exclude);
     results.push({ repo: r.name, indexed: true });
   }
   return results;
