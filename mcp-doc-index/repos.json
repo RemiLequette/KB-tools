@@ -1,19 +1,19 @@
 [
   {
     "name": "kb",
-    "root": "G:\\My Drive\\000-Projects\\100-RemiProVault\\KB",
+    "root": "C:\\Users\\RemiLequette\\OneDrive\\Tech4Best\\100-RDT4BVault\\KB",
     "db": "../data/kb.db",
     "exclude": []
   },
   {
     "name": "ddscope",
-    "root": "C:\\Users\\RemiLequette\\OneDrive\\Tech4Best\\100-RemiT4BVault\\DDScope",
+    "root": "C:\\Users\\RemiLequette\\OneDrive\\Tech4Best\\100-RDT4BVault\\DDScope",
     "db": "../data/ddscope.db",
     "exclude": []
   },
   {
     "name": "commwise",
-    "root": "C:\\Users\\RemiLequette\\OneDrive\\Tech4Best\\100-RemiT4BVault\\Commwise",
+    "root": "C:\\Users\\RemiLequette\\OneDrive\\Tech4Best\\100-RDT4BVault\\Commwise",
     "db": "../data/commwise.db",
     "exclude": []
   }
