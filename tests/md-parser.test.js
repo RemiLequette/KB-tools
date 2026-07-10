@@ -295,6 +295,60 @@ describe('getSections', () => {
     expect(sections).toContainEqual({ path: 'Test Doc/Why', level: 2, content: 'Intro.' });
     expect(sections).toContainEqual({ path: 'Test Doc/Why/Detail A', level: 3, content: 'A.' });
   });
+
+  // @convention conventions/mcp-doc-index.md [section Section granularity]
+  it('falls back to the filename (without extension) as H1 when the document has no # Title', () => {
+    const doc = parseText([
+      '## Quick Start', 'S.', '',
+      '## Definition', 'A term.',
+    ].join('\n'), 'GLOSSARY/ITEMS/Some Term.md');
+
+    expect(doc.title).toBeNull();
+    const sections = getSections(doc);
+    expect(sections).toContainEqual({ path: 'Some Term/Definition', level: 2, content: 'A term.' });
+  });
+
+  // @convention conventions/mcp-doc-index.md [section Section granularity]
+  it('quotes a path segment that itself contains a / so the path stays splittable', () => {
+    const doc = parseText([
+      '# API Doc', '',
+      '## Quick Start', 'S.', '',
+      '## API Contract', '',
+      '### GET /file', 'Reads a file.',
+    ].join('\n'), FILE);
+
+    const sections = getSections(doc);
+    expect(sections).toContainEqual({
+      path: 'API Doc/API Contract/"GET /file"', level: 3, content: 'Reads a file.',
+    });
+  });
+});
+
+describe('section addressing edge cases — title fallback and / escaping', () => {
+  // @convention conventions/mcp-doc-index.md [section Section granularity]
+  it('getSectionByPath resolves a title-less document via its filename', () => {
+    const doc = parseText([
+      '## Quick Start', 'S.', '',
+      '## Definition', 'A term.',
+    ].join('\n'), 'GLOSSARY/ITEMS/Some Term.md');
+
+    expect(getSectionByPath(doc, 'Some Term/Definition')).toBe('A term.');
+  });
+
+  // @convention conventions/mcp-doc-index.md [section Section granularity]
+  it('getSectionByPath and setSectionByPath round-trip a quoted / segment', () => {
+    const doc = parseText([
+      '# API Doc', '',
+      '## Quick Start', 'S.', '',
+      '## API Contract', '',
+      '### GET /file', 'Reads a file.',
+    ].join('\n'), FILE);
+
+    expect(getSectionByPath(doc, 'API Doc/API Contract/"GET /file"')).toBe('Reads a file.');
+
+    setSectionByPath(doc, 'API Doc/API Contract/"GET /file"', 'Updated.');
+    expect(getSectionByPath(doc, 'API Doc/API Contract/"GET /file"')).toBe('Updated.');
+  });
 });
 
 // ---------------------------------------------------------------------------
