@@ -95,23 +95,28 @@ describe('listTriggers', () => {
 // ---------------------------------------------------------------------------
 
 describe('readSection', () => {
-  it('reads an existing section', () => {
-    const content = readSection(ctx, { repo: 'kb', file: 'conventions/alpha.md', section: 'Why' });
+  it('reads an existing section by its full H1/H2 path', () => {
+    const content = readSection(ctx, { repo: 'kb', file: 'conventions/alpha.md', section: 'Alpha Convention/Why' });
     expect(content).toContain('starting point');
   });
 
   it('throws SECTION_NOT_FOUND for a missing section', () => {
-    expect(() => readSection(ctx, { repo: 'kb', file: 'conventions/alpha.md', section: 'Nope' }))
+    expect(() => readSection(ctx, { repo: 'kb', file: 'conventions/alpha.md', section: 'Alpha Convention/Nope' }))
+      .toThrow(/SECTION_NOT_FOUND/);
+  });
+
+  it('throws SECTION_NOT_FOUND for a bare name without the full path', () => {
+    expect(() => readSection(ctx, { repo: 'kb', file: 'conventions/alpha.md', section: 'Why' }))
       .toThrow(/SECTION_NOT_FOUND/);
   });
 
   it('throws FILE_NOT_FOUND for a missing file', () => {
-    expect(() => readSection(ctx, { repo: 'kb', file: 'conventions/nope.md', section: 'Why' }))
+    expect(() => readSection(ctx, { repo: 'kb', file: 'conventions/nope.md', section: 'Alpha Convention/Why' }))
       .toThrow(/FILE_NOT_FOUND/);
   });
 
   it('throws REPO_NOT_FOUND for an unknown repo', () => {
-    expect(() => readSection(ctx, { repo: 'nope', file: 'conventions/alpha.md', section: 'Why' }))
+    expect(() => readSection(ctx, { repo: 'nope', file: 'conventions/alpha.md', section: 'Alpha Convention/Why' }))
       .toThrow(/REPO_NOT_FOUND/);
   });
 });
@@ -148,41 +153,57 @@ describe('writeSection', () => {
   });
 
   it('overwrites an existing section (mode=set, default)', () => {
-    writeSection(ctx, { repo: 'kb', file: 'conventions/alpha.md', section: 'Why', content: 'Updated why.' });
-    const content = readSection(ctx, { repo: 'kb', file: 'conventions/alpha.md', section: 'Why' });
+    writeSection(ctx, { repo: 'kb', file: 'conventions/alpha.md', section: 'Alpha Convention/Why', content: 'Updated why.' });
+    const content = readSection(ctx, { repo: 'kb', file: 'conventions/alpha.md', section: 'Alpha Convention/Why' });
     expect(content).toBe('Updated why.');
   });
 
   it('rejects a write that leaves the document non-conformant', () => {
-    expect(() => writeSection(ctx, { repo: 'kb', file: 'conventions/alpha.md', section: 'Keywords', content: '' }))
+    expect(() => writeSection(ctx, { repo: 'kb', file: 'conventions/alpha.md', section: 'Alpha Convention/Keywords', content: '' }))
       .toThrow(/NOT_CONFORMANT/);
     // File on disk must be untouched.
     const raw = fs.readFileSync(SANDBOX_ALPHA(), 'utf-8');
     expect(raw).toContain('alpha, convention');
   });
 
-  it('inserts a new section at a given position', () => {
+  it('inserts a new ## section at a given position', () => {
     writeSection(ctx, {
-      repo: 'kb', file: 'conventions/alpha.md', section: 'How', content: 'Steps here.',
-      mode: 'insert', position: 'after:What',
+      repo: 'kb', file: 'conventions/alpha.md', section: 'Alpha Convention/How', content: 'Steps here.',
+      mode: 'insert', position: 'after:Alpha Convention/What',
     });
-    const content = readSection(ctx, { repo: 'kb', file: 'conventions/alpha.md', section: 'How' });
+    const content = readSection(ctx, { repo: 'kb', file: 'conventions/alpha.md', section: 'Alpha Convention/How' });
     expect(content).toBe('Steps here.');
   });
 
+  it('inserts a new ### subsection under an existing ##', () => {
+    writeSection(ctx, {
+      repo: 'kb', file: 'conventions/alpha.md', section: 'Alpha Convention/Why/Detail', content: 'Detail here.',
+      mode: 'insert', position: 'beginning',
+    });
+    const content = readSection(ctx, { repo: 'kb', file: 'conventions/alpha.md', section: 'Alpha Convention/Why/Detail' });
+    expect(content).toBe('Detail here.');
+  });
+
+  it('throws PARENT_NOT_FOUND when inserting a ### under a non-existent ##', () => {
+    expect(() => writeSection(ctx, {
+      repo: 'kb', file: 'conventions/alpha.md', section: 'Alpha Convention/Nope/Detail', content: 'X.',
+      mode: 'insert', position: 'beginning',
+    })).toThrow(/PARENT_NOT_FOUND/);
+  });
+
   it('rejects deleting a mandatory section', () => {
-    expect(() => writeSection(ctx, { repo: 'kb', file: 'conventions/alpha.md', section: 'Keywords', mode: 'delete' }))
+    expect(() => writeSection(ctx, { repo: 'kb', file: 'conventions/alpha.md', section: 'Alpha Convention/Keywords', mode: 'delete' }))
       .toThrow(/PROTECTED_SECTION/);
   });
 
   it('deletes a non-mandatory section', () => {
-    writeSection(ctx, { repo: 'kb', file: 'conventions/alpha.md', section: 'Why', mode: 'delete' });
-    expect(() => readSection(ctx, { repo: 'kb', file: 'conventions/alpha.md', section: 'Why' }))
+    writeSection(ctx, { repo: 'kb', file: 'conventions/alpha.md', section: 'Alpha Convention/Why', mode: 'delete' });
+    expect(() => readSection(ctx, { repo: 'kb', file: 'conventions/alpha.md', section: 'Alpha Convention/Why' }))
       .toThrow(/SECTION_NOT_FOUND/);
   });
 
   it('reindexes the file after a successful write', () => {
-    writeSection(ctx, { repo: 'kb', file: 'conventions/alpha.md', section: 'Why', content: 'Searchable update xyz123.' });
+    writeSection(ctx, { repo: 'kb', file: 'conventions/alpha.md', section: 'Alpha Convention/Why', content: 'Searchable update xyz123.' });
     const result = search(ctx, { query: 'xyz123', repo: 'kb' });
     expect(result.section_matches.length).toBeGreaterThan(0);
   });

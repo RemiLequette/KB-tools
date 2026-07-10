@@ -11,8 +11,9 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-  parseText, getSection, hasSection, getIssues, isConformant,
-  setSection, insertSectionAt, deleteSection,
+  parseText, getSection, hasSection, getSectionByPath, hasSectionByPath, getSections,
+  getIssues, isConformant,
+  setSectionByPath, insertSectionAt, deleteSection,
   toMarkdown, buildTocLines,
 } from '../lib/md-parser.js';
 
@@ -132,30 +133,167 @@ describe('getIssues', () => {
     const doc = parseText('# Test Doc\n\n## Quick Start\nS.\n\n## Load when\nT.\n', FILE);
     expect(isConformant(doc)).toBe(true);
   });
+
+  // @convention conventions/documentation.md [section Headings]
+  it('flags a ### duplicated under the same ## parent', () => {
+    const doc = parseText([
+      '# Test Doc', '',
+      '## Quick Start', 'S.', '',
+      '## Load when', 'T.', '',
+      '## Why', '',
+      '### Rule', 'A.', '',
+      '### Rule', 'B.',
+    ].join('\n'), FILE);
+    expect(getIssues(doc)).toContain('Duplicate ### heading under ## Why: Rule');
+  });
+
+  // @convention conventions/mcp-doc-index.md [section Section granularity]
+  it('does not flag the same ### name recurring under different ## parents', () => {
+    const doc = parseText([
+      '# Test Doc', '',
+      '## Quick Start', 'S.', '',
+      '## Load when', 'T.', '',
+      '## Why', '',
+      '### Rule', 'A.', '',
+      '## What', '',
+      '### Rule', 'B.',
+    ].join('\n'), FILE);
+    expect(isConformant(doc)).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------
 // setSection / insertSectionAt / deleteSection
 // ---------------------------------------------------------------------------
 
-describe('section mutation', () => {
-  it('setSection overwrites an existing section', () => {
+describe('section mutation — ## (H1/H2 paths)', () => {
+  it('setSectionByPath overwrites an existing section', () => {
     const doc = parseText('# Test Doc\n\n## Quick Start\nS.\n\n## Why\nOld.\n', FILE);
-    setSection(doc, 'Why', 'New.');
+    setSectionByPath(doc, 'Test Doc/Why', 'New.');
     expect(getSection(doc, 'Why')).toBe('New.');
+    expect(getSectionByPath(doc, 'Test Doc/Why')).toBe('New.');
   });
 
-  it('insertSectionAt inserts a new section at the given position', () => {
+  it('setSectionByPath throws on a title mismatch', () => {
+    const doc = parseText('# Test Doc\n\n## Quick Start\nS.\n\n## Why\nOld.\n', FILE);
+    expect(() => setSectionByPath(doc, 'Wrong Title/Why', 'New.')).toThrow();
+  });
+
+  it('insertSectionAt inserts a new ## section at the given position', () => {
     const doc = parseText('# Test Doc\n\n## Quick Start\nS.\n\n## Why\nW.\n\n## What\nWh.\n', FILE);
-    insertSectionAt(doc, 'How', 'H.', 'after:Why');
+    insertSectionAt(doc, 'Test Doc/How', 'H.', 'after:Test Doc/Why');
     const names = doc.sections.map(s => s.name);
     expect(names).toEqual(['Quick Start', 'Why', 'How', 'What']);
   });
 
-  it('deleteSection removes a section', () => {
+  it('deleteSection removes a ## section', () => {
     const doc = parseText('# Test Doc\n\n## Quick Start\nS.\n\n## Why\nW.\n', FILE);
-    deleteSection(doc, 'Why');
+    deleteSection(doc, 'Test Doc/Why');
     expect(hasSection(doc, 'Why')).toBe(false);
+  });
+});
+
+describe('section mutation — ### (H1/H2/H3 paths)', () => {
+  it('getSectionByPath reads a subsection\'s own content, not its siblings', () => {
+    const doc = parseText([
+      '# Test Doc', '',
+      '## Quick Start', 'S.', '',
+      '## Why', '',
+      '### Detail A', 'A.', '',
+      '### Detail B', 'B.',
+    ].join('\n'), FILE);
+
+    expect(getSectionByPath(doc, 'Test Doc/Why/Detail A')).toBe('A.');
+    expect(getSectionByPath(doc, 'Test Doc/Why/Detail B')).toBe('B.');
+    expect(hasSectionByPath(doc, 'Test Doc/Why/Detail C')).toBe(false);
+  });
+
+  it('getSectionByPath on the parent H1/H2 returns only the direct content, excluding subsections', () => {
+    const doc = parseText([
+      '# Test Doc', '',
+      '## Quick Start', 'S.', '',
+      '## Why', 'Intro.', '',
+      '### Detail A', 'A.',
+    ].join('\n'), FILE);
+
+    expect(getSectionByPath(doc, 'Test Doc/Why')).toBe('Intro.');
+    expect(getSectionByPath(doc, 'Test Doc/Why/Detail A')).toBe('A.');
+  });
+
+  it('the same ### name is addressable independently under different ## parents', () => {
+    const doc = parseText([
+      '# Test Doc', '',
+      '## Quick Start', 'S.', '',
+      '## Why', '',
+      '### Rule', 'A.', '',
+      '## What', '',
+      '### Rule', 'B.',
+    ].join('\n'), FILE);
+
+    expect(getSectionByPath(doc, 'Test Doc/Why/Rule')).toBe('A.');
+    expect(getSectionByPath(doc, 'Test Doc/What/Rule')).toBe('B.');
+  });
+
+  it('setSectionByPath creates a new ### under an existing ##', () => {
+    const doc = parseText('# Test Doc\n\n## Quick Start\nS.\n\n## Why\n', FILE);
+    setSectionByPath(doc, 'Test Doc/Why/Detail', 'New.');
+    expect(getSectionByPath(doc, 'Test Doc/Why/Detail')).toBe('New.');
+  });
+
+  it('setSectionByPath throws when the parent ## does not exist', () => {
+    const doc = parseText('# Test Doc\n\n## Quick Start\nS.\n', FILE);
+    expect(() => setSectionByPath(doc, 'Test Doc/Missing/Detail', 'New.')).toThrow(/parent section not found/i);
+  });
+
+  it('insertSectionAt inserts a new ### among its parent\'s siblings', () => {
+    const doc = parseText([
+      '# Test Doc', '',
+      '## Quick Start', 'S.', '',
+      '## Why', '',
+      '### Detail A', 'A.', '',
+      '### Detail C', 'C.',
+    ].join('\n'), FILE);
+
+    insertSectionAt(doc, 'Test Doc/Why/Detail B', 'B.', 'after:Test Doc/Why/Detail A');
+    const why = doc.sections.find(s => s.name === 'Why');
+    expect(why.subsections.map(s => s.name)).toEqual(['Detail A', 'Detail B', 'Detail C']);
+  });
+
+  it('insertSectionAt returns PARENT_NOT_FOUND when the parent ## is missing', () => {
+    const doc = parseText('# Test Doc\n\n## Quick Start\nS.\n', FILE);
+    const result = insertSectionAt(doc, 'Test Doc/Missing/Detail', 'X.', 'beginning');
+    expect(result).toBe('PARENT_NOT_FOUND:Missing');
+  });
+
+  it('deleteSection removes a ### without affecting its siblings', () => {
+    const doc = parseText([
+      '# Test Doc', '',
+      '## Quick Start', 'S.', '',
+      '## Why', '',
+      '### Detail A', 'A.', '',
+      '### Detail B', 'B.',
+    ].join('\n'), FILE);
+
+    const deleted = deleteSection(doc, 'Test Doc/Why/Detail A');
+    expect(deleted).toBe(true);
+    expect(hasSectionByPath(doc, 'Test Doc/Why/Detail A')).toBe(false);
+    expect(getSectionByPath(doc, 'Test Doc/Why/Detail B')).toBe('B.');
+  });
+});
+
+describe('getSections', () => {
+  it('returns one leaf per ## (direct content) and one per ###, with full H1/H2/H3 paths', () => {
+    const doc = parseText([
+      '# Test Doc', '',
+      '## Quick Start', 'S.', '',
+      '## Why', 'Intro.', '',
+      '### Detail A', 'A.',
+    ].join('\n'), FILE);
+
+    const sections = getSections(doc);
+    expect(sections).toContainEqual({ path: 'Test Doc/Quick Start', level: 2, content: 'S.' });
+    expect(sections).toContainEqual({ path: 'Test Doc/Why', level: 2, content: 'Intro.' });
+    expect(sections).toContainEqual({ path: 'Test Doc/Why/Detail A', level: 3, content: 'A.' });
   });
 });
 

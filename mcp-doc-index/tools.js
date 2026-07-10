@@ -10,16 +10,20 @@
  * name, plus repo metadata (root, db path). Callers create one Context per
  * server process with createContext() and reuse it across tool calls.
  *
- * @convention conventions/mcp-doc-index.md [## How — Implementation > MCP tools (draft contract)]
+ * `read_section`/`write_section`'s `section` argument is the full H1/H2 or
+ * H1/H2/H3 path — see conventions/mcp-doc-index.md [section Section granularity].
+ * No bare heading name is accepted.
+ *
+ * @convention conventions/mcp-doc-index.md [## How — Implementation > MCP tools]
  * @convention conventions/mcp-doc-index.md [## How — Implementation > Design decisions]
  *
  * Not yet in references (document debt — update mcp-doc-index.md to absorb these):
  *   - REQUIRED_SECTIONS (protected-from-delete list) duplicates the list in
  *     md-parser.js; md-parser does not currently export it.
- *   - Error codes (FILE_NOT_FOUND, SECTION_NOT_FOUND, PROTECTED_SECTION,
- *     NOT_CONFORMANT, REPO_NOT_FOUND, LOCK_HELD) follow conventions/tools.md's
- *     general error-code catalogue, applied here to MCP tool results instead
- *     of the stdout `ERROR:<code>:<message>` line format.
+ *   - Error codes (FILE_NOT_FOUND, SECTION_NOT_FOUND, PARENT_NOT_FOUND,
+ *     PROTECTED_SECTION, NOT_CONFORMANT, REPO_NOT_FOUND, LOCK_HELD) follow
+ *     conventions/tools.md's general error-code catalogue, applied here to MCP
+ *     tool results instead of the stdout `ERROR:<code>:<message>` line format.
  */
 
 import fs   from 'fs';
@@ -158,8 +162,8 @@ export function readSection(ctx, { repo, file, section }) {
   indexFile(db, r.name, absPath);
 
   const doc = md.parseFile(absPath);
-  if (!md.hasSection(doc, section)) fail('SECTION_NOT_FOUND', `Section not found: ${section}`);
-  return md.getSection(doc, section);
+  if (!md.hasSectionByPath(doc, section)) fail('SECTION_NOT_FOUND', `Section not found: ${section}`);
+  return md.getSectionByPath(doc, section);
 }
 
 // ---------------------------------------------------------------------------
@@ -186,7 +190,9 @@ export function writeSection(ctx, { repo, file, section, content, mode = 'set', 
   const absPath = _resolveFile(r, file);
   const db = ctx.getDb(r.name);
 
-  if (mode === 'delete' && REQUIRED_SECTIONS.includes(section)) {
+  const pathSegments = section.split('/');
+  const leafName = pathSegments[pathSegments.length - 1];
+  if (mode === 'delete' && pathSegments.length === 2 && REQUIRED_SECTIONS.includes(leafName)) {
     fail('PROTECTED_SECTION', `Section is mandatory and cannot be deleted: ${section}`);
   }
 
@@ -194,12 +200,14 @@ export function writeSection(ctx, { repo, file, section, content, mode = 'set', 
     const doc = md.parseFile(absPath);
 
     if (mode === 'set') {
-      md.setSection(doc, section, content ?? '');
+      md.setSectionByPath(doc, section, content ?? '');
     } else if (mode === 'insert') {
       if (!position) fail('MISSING_ARG', 'position is required for mode=insert');
       const result = md.insertSectionAt(doc, section, content ?? '', position);
       if (typeof result === 'string' && result.startsWith('SECTION_NOT_FOUND:')) {
-        fail('SECTION_NOT_FOUND', `Reference section not found: ${result.split(':')[1]}`);
+        fail('SECTION_NOT_FOUND', `Reference section not found: ${result.split(':').slice(1).join(':')}`);
+      } else if (typeof result === 'string' && result.startsWith('PARENT_NOT_FOUND:')) {
+        fail('PARENT_NOT_FOUND', `Parent section not found: ${result.split(':').slice(1).join(':')}`);
       }
     } else if (mode === 'delete') {
       const deleted = md.deleteSection(doc, section);

@@ -21,10 +21,10 @@ const ALPHA = {
   loadWhen:  null,
   mtime:     1700000000,
   sections:  [
-    { name: 'Quick Start', content: 'Load when working with alpha things.' },
-    { name: 'Why',         content: 'Alpha is the first letter of the Greek alphabet.' },
-    { name: 'What',        content: 'Alpha establishes the foundation of all things.' },
-    { name: 'Keywords',    content: 'alpha, convention' },
+    { path: 'Alpha Convention/Quick Start', content: 'Load when working with alpha things.' },
+    { path: 'Alpha Convention/Why',         content: 'Alpha is the first letter of the Greek alphabet.' },
+    { path: 'Alpha Convention/What',        content: 'Alpha establishes the foundation of all things.' },
+    { path: 'Alpha Convention/Keywords',    content: 'alpha, convention' },
   ],
 };
 
@@ -35,7 +35,7 @@ const BETA = {
   loadWhen:  'Following the beta process\nSetting up beta workflows',
   mtime:     1700000001,
   sections:  [
-    { name: 'Steps', content: 'Beta follows alpha in the Greek alphabet.' },
+    { path: 'Beta Guide/Steps', content: 'Beta follows alpha in the Greek alphabet.' },
   ],
 };
 
@@ -89,10 +89,10 @@ describe('upsertDocument', () => {
   it('inserts all sections for the document', () => {
     upsertDocument(db, ALPHA.repo, ALPHA.filePath, ALPHA.title, ALPHA.loadWhen, ALPHA.mtime, ALPHA.sections);
     const docRow = db.prepare('SELECT id FROM documents WHERE file_path=?').get(ALPHA.filePath);
-    const sections = db.prepare('SELECT name FROM sections WHERE doc_id=?').all(docRow.id);
-    const names = sections.map(s => s.name);
-    expect(names).toContain('Why');
-    expect(names).toContain('What');
+    const sections = db.prepare('SELECT path FROM sections WHERE doc_id=?').all(docRow.id);
+    const paths = sections.map(s => s.path);
+    expect(paths).toContain('Alpha Convention/Why');
+    expect(paths).toContain('Alpha Convention/What');
     expect(sections.length).toBe(ALPHA.sections.length);
   });
 
@@ -113,20 +113,20 @@ describe('upsertDocument', () => {
   it('replaces sections on second upsert', () => {
     upsertDocument(db, ALPHA.repo, ALPHA.filePath, ALPHA.title, ALPHA.loadWhen, ALPHA.mtime, ALPHA.sections);
     // Second upsert with fewer sections
-    const updatedSections = [{ name: 'Quick Start', content: 'Updated.' }];
+    const updatedSections = [{ path: 'Alpha Convention/Quick Start', content: 'Updated.' }];
     upsertDocument(db, ALPHA.repo, ALPHA.filePath, ALPHA.title, ALPHA.loadWhen, ALPHA.mtime + 1, updatedSections);
     const docRow = db.prepare('SELECT id FROM documents WHERE file_path=?').get(ALPHA.filePath);
-    const sections = db.prepare('SELECT name FROM sections WHERE doc_id=?').all(docRow.id);
+    const sections = db.prepare('SELECT path FROM sections WHERE doc_id=?').all(docRow.id);
     expect(sections.length).toBe(1);
-    expect(sections[0].name).toBe('Quick Start');
+    expect(sections[0].path).toBe('Alpha Convention/Quick Start');
   });
 
   it('does not mix sections across two different documents', () => {
     upsertDocument(db, ALPHA.repo, ALPHA.filePath, ALPHA.title, ALPHA.loadWhen, ALPHA.mtime, ALPHA.sections);
     upsertDocument(db, BETA.repo,  BETA.filePath,  BETA.title,  BETA.loadWhen,  BETA.mtime,  BETA.sections);
     const alphaDoc = db.prepare('SELECT id FROM documents WHERE file_path=?').get(ALPHA.filePath);
-    const alphaSections = db.prepare('SELECT name FROM sections WHERE doc_id=?').all(alphaDoc.id);
-    expect(alphaSections.map(s => s.name)).not.toContain('Steps');
+    const alphaSections = db.prepare('SELECT path FROM sections WHERE doc_id=?').all(alphaDoc.id);
+    expect(alphaSections.map(s => s.path)).not.toContain('Beta Guide/Steps');
   });
 });
 
@@ -178,10 +178,10 @@ describe('searchSections', () => {
     expect(hits.length).toBeGreaterThan(0);
   });
 
-  it('returns file_path and section name for each hit', () => {
+  it('returns file_path and the section\'s full path for each hit', () => {
     const hits = searchSections(db, 'foundation');
     expect(hits[0].file_path).toBe('conventions/alpha.md');
-    expect(hits[0].section).toBe('What');
+    expect(hits[0].section).toBe('Alpha Convention/What');
   });
 
   it('returns a snippet containing the matched term', () => {

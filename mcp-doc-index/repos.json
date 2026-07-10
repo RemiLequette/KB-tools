@@ -1,19 +1,19 @@
 [
   {
     "name": "kb",
-    "root": "C:\\Users\\RemiLequette\\OneDrive\\Tech4Best\\100-RDT4BVault\\KB",
+    "root": "I:\\Shared drives\\T4B-Shared\\100-RDT4BVault\\KB",
     "db": "../data/kb.db",
-    "exclude": []
+    "exclude": ["TODO", "CHANGELOG", "Journal"]
   },
   {
     "name": "ddscope",
-    "root": "C:\\Users\\RemiLequette\\OneDrive\\Tech4Best\\100-RDT4BVault\\DDScope",
+    "root": "I:\\Shared drives\\T4B-Shared\\100-RDT4BVault\\DDScope",
     "db": "../data/ddscope.db",
-    "exclude": []
+    "exclude": ["TODO", "CHANGELOG", "Journal"]
   },
   {
     "name": "commwise",
-    "root": "C:\\Users\\RemiLequette\\OneDrive\\Tech4Best\\100-RDT4BVault\\Commwise",
+    "root": "I:\\Shared drives\\T4B-Shared\\100-RDT4BVault\\Commwise",
     "db": "../data/commwise.db",
     "exclude": []
   }

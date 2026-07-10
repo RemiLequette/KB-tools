@@ -86,11 +86,11 @@ server.registerTool(
   'read_section',
   {
     title: 'Read a document section',
-    description: 'Reads one ## section\'s content from a Markdown document, by repo-relative or absolute file path.',
+    description: 'Reads one section\'s content from a Markdown document, by repo-relative or absolute file path. A section is a ## or ### heading.',
     inputSchema: {
       repo: z.string().describe('Repo name (see repos.json).'),
       file: z.string().describe('File path, relative to the repo root (or absolute).'),
-      section: z.string().describe('Section heading name, without the ## prefix.'),
+      section: z.string().describe('Full section path: "Document Title/Heading" for a ## section, or "Document Title/Heading/Subheading" for a ### subsection. Bare heading names are not accepted.'),
     },
   },
   async ({ repo, file, section }) => {
@@ -103,14 +103,14 @@ server.registerTool(
   'write_section',
   {
     title: 'Write a document section',
-    description: 'Creates, overwrites, inserts, or deletes a ## section, then writes the file — rejected if the resulting document fails conformance (getIssues).',
+    description: 'Creates, overwrites, inserts, or deletes a ## or ### section, then writes the file — rejected if the resulting document fails conformance (getIssues).',
     inputSchema: {
       repo: z.string().describe('Repo name (see repos.json).'),
       file: z.string().describe('File path, relative to the repo root (or absolute).'),
-      section: z.string().describe('Section heading name, without the ## prefix.'),
+      section: z.string().describe('Full section path: "Document Title/Heading" for a ## section, or "Document Title/Heading/Subheading" for a ### subsection. Bare heading names are not accepted. For mode=insert, this is the path being created; a new ### requires its parent ## to already exist.'),
       content: z.string().optional().describe('New section body. Ignored when mode=delete.'),
       mode: z.enum(['set', 'insert', 'delete']).optional().describe('set (default): create or overwrite. insert: requires position. delete: removes the section (blocked for mandatory sections).'),
-      position: z.string().optional().describe('Required when mode=insert. "beginning", "before:<Section Name>", or "after:<Section Name>".'),
+      position: z.string().optional().describe('Required when mode=insert. "beginning", "before:<Section Path>", or "after:<Section Path>" — the reference must be a sibling (same parent).'),
     },
   },
   async ({ repo, file, section, content, mode, position }) => {
