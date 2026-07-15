@@ -3,18 +3,12 @@
     "name": "kb",
     "root": "I:\\Shared drives\\T4B-Shared\\100-RDT4BVault\\KB",
     "db": "../data/kb.db",
-    "exclude": ["TODO", "CHANGELOG", "Journal"]
+    "exclude": ["TODO", "CHANGELOG", "Journal", "ARCHIVE"]
   },
   {
-    "name": "ddscope",
-    "root": "I:\\Shared drives\\T4B-Shared\\100-RDT4BVault\\DDScope",
-    "db": "../data/ddscope.db",
-    "exclude": ["TODO", "CHANGELOG", "Journal"]
-  },
-  {
-    "name": "commwise",
-    "root": "I:\\Shared drives\\T4B-Shared\\100-RDT4BVault\\Commwise",
-    "db": "../data/commwise.db",
-    "exclude": []
+    "name": "scflow",
+    "root": "I:\\Shared drives\\T4B-Shared\\100-RDT4BVault\\SCFlow",
+    "db": "../data/scflow.db",
+    "exclude": ["TODO", "CHANGELOG", "Journal", "ARCHIVE"]
   }
 ]
