@@ -109,7 +109,11 @@ describe('write mode', () => {
   it('rewrites a legacy insta-toc block into a wikilink TOC', () => {
     run(SANDBOX, 'write');
     const content = fs.readFileSync(path.join(SANDBOX, 'legacy.md'), 'utf-8');
-    expect(content).not.toContain('insta-toc');
+    // Not `.not.toContain('insta-toc')`: the fixture's own Quick Start prose
+    // legitimately mentions "insta-toc" ("Uses the old insta-toc codeblock..."),
+    // so that broad assertion always failed regardless of a correct migration.
+    // What must actually disappear is the codeblock fence itself.
+    expect(content).not.toContain('```insta-toc');
     expect(content).toContain('## Table of Contents');
     expect(content).toContain('- [[#Why]]');
   });

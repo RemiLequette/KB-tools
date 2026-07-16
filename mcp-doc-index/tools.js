@@ -2,9 +2,9 @@
  * tools.js
  *
  * Pure orchestration layer for the MCP doc index tools — search, list_triggers,
- * read_section, write_section, reindex. Kept separate from server.js (the MCP
- * transport wiring) so it can be unit-tested without spinning up a protocol
- * connection.
+ * read_section, write_section, create_document, reindex. Kept separate from
+ * server.js (the MCP transport wiring) so it can be unit-tested without
+ * spinning up a protocol connection.
  *
  * A Context groups the open db handles for all configured repos, keyed by repo
  * name, plus repo metadata (root, db path). Callers create one Context per
@@ -20,10 +20,11 @@
  * Not yet in references (document debt — update mcp-doc-index.md to absorb these):
  *   - REQUIRED_SECTIONS (protected-from-delete list) duplicates the list in
  *     md-parser.js; md-parser does not currently export it.
- *   - Error codes (FILE_NOT_FOUND, SECTION_NOT_FOUND, PARENT_NOT_FOUND,
- *     PROTECTED_SECTION, NOT_CONFORMANT, REPO_NOT_FOUND, LOCK_HELD) follow
- *     conventions/tools.md's general error-code catalogue, applied here to MCP
- *     tool results instead of the stdout `ERROR:<code>:<message>` line format.
+ *   - Error codes (FILE_NOT_FOUND, FILE_EXISTS, SECTION_NOT_FOUND, PARENT_NOT_FOUND,
+ *     PROTECTED_SECTION, RESERVED_SECTION, NOT_CONFORMANT, REPO_NOT_FOUND,
+ *     LOCK_HELD) follow conventions/tools.md's general error-code catalogue,
+ *     applied here to MCP tool results instead of the stdout
+ *     `ERROR:<code>:<message>` line format.
  */
 
 import fs   from 'fs';
@@ -37,6 +38,12 @@ import * as md from '../lib/md-parser.js';
 
 // Mirrors md-parser.js REQUIRED_SECTIONS — see "Not yet in references" above.
 const REQUIRED_SECTIONS = ['Quick Start', 'Keywords', 'Index', 'Changelog'];
+
+// Tool-owned, fully generated sections — never a real entry in doc.sections
+// (md-parser.js [_parse] discards them on read, [toMarkdown]/[buildTocLines]
+// regenerate them on every write). Not addressable by read_section or
+// write_section under any mode — see T-017 Bug 4.
+const RESERVED_SECTIONS = ['Table of Contents'];
 
 // ---------------------------------------------------------------------------
 // Errors
@@ -91,6 +98,15 @@ function _resolveFile(repo, relOrAbsFile) {
     : path.resolve(repo.root, relOrAbsFile);
   if (!fs.existsSync(absPath)) fail('FILE_NOT_FOUND', `File not found: ${absPath}`);
   return absPath;
+}
+
+/** Throws RESERVED_SECTION when the path's leaf segment is tool-owned (e.g. Table of Contents). */
+function _checkNotReserved(section) {
+  const segments = section.split('/');
+  const leafName = segments[segments.length - 1];
+  if (RESERVED_SECTIONS.includes(leafName)) {
+    fail('RESERVED_SECTION', `Section is tool-generated and not directly addressable: ${section}`);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -155,6 +171,8 @@ export function listTriggers(ctx, { repo }) {
  * @returns {string} section content
  */
 export function readSection(ctx, { repo, file, section }) {
+  _checkNotReserved(section);
+
   const r = findRepo(ctx.repos, repo);
   const absPath = _resolveFile(r, file);
   const db = ctx.getDb(r.name);
@@ -185,6 +203,8 @@ export function writeSection(ctx, { repo, file, section, content, mode = 'set', 
   if (!['set', 'insert', 'delete'].includes(mode)) {
     fail('MISSING_ARG', `Invalid mode: ${mode}`);
   }
+
+  _checkNotReserved(section);
 
   const r = findRepo(ctx.repos, repo);
   const absPath = _resolveFile(r, file);
@@ -228,6 +248,74 @@ export function writeSection(ctx, { repo, file, section, content, mode = 'set', 
 
     indexFile(db, r.name, absPath); // mtime changed — indexFile re-parses and upserts
     return { ok: true };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// createDocument
+// ---------------------------------------------------------------------------
+
+/**
+ * Scaffold a brand-new conformant Markdown document — title, optional
+ * subtitle/document-type/language preamble, then the two conformance-required
+ * sections (`## Quick Start`, `## Load when`) — and write + index it.
+ *
+ * `write_section` assumes a file that already exists and already conforms to
+ * `conventions/documentation.md`; without this tool, the initial creation of
+ * a new `.md` still required the filesystem MCP directly (see T-004). Fails
+ * with FILE_EXISTS if the target path already exists — use `write_section` to
+ * edit an existing document instead.
+ *
+ * Reuses the same `md-parser.js` accessors as `write_section` (`setTitle`,
+ * `setSectionByPath`, `toMarkdown`, `getIssues`) rather than hand-assembling
+ * Markdown text, so a scaffolded document is byte-for-byte what a subsequent
+ * `write_section` call would also produce (auto-generated TOC and
+ * `[[#Quick Start]]` up-links included) — no separate template to drift out
+ * of sync with `md-parser.js`.
+ *
+ * @param {ReturnType<typeof createContext>} ctx
+ * @param {{ repo: string, file: string, title: string, quickStart: string, loadWhen: string, subtitle?: string, documentType?: string, language?: string }} args
+ * @returns {{ ok: true, file: string }}
+ */
+export function createDocument(ctx, { repo, file, title, quickStart, loadWhen, subtitle, documentType, language }) {
+  if (!title || !title.trim()) fail('MISSING_ARG', 'title is required');
+  if (!quickStart || !quickStart.trim()) fail('MISSING_ARG', 'quickStart is required');
+  if (!loadWhen || !loadWhen.trim()) fail('MISSING_ARG', 'loadWhen is required');
+
+  const r = findRepo(ctx.repos, repo);
+  const absPath = path.isAbsolute(file) ? file : path.resolve(r.root, file);
+  if (fs.existsSync(absPath)) fail('FILE_EXISTS', `File already exists: ${absPath}`);
+
+  const db = ctx.getDb(r.name);
+
+  return withLock(r.db, () => {
+    const doc = md.parseText('', absPath);
+    md.setTitle(doc, title);
+
+    const preambleLines = [];
+    if (subtitle) preambleLines.push(subtitle.trim());
+    if (documentType) preambleLines.push(`*Document type: ${documentType.trim()}*`);
+    if (language) preambleLines.push(`*Language: ${language.trim()}*`);
+    if (preambleLines.length > 0) doc.preamble = preambleLines;
+
+    md.setSectionByPath(doc, `${title}/Quick Start`, quickStart);
+    md.setSectionByPath(doc, `${title}/Load when`, loadWhen);
+
+    const markdown = md.toMarkdown(doc);
+    const issues = md.getIssues(doc);
+    if (issues.length > 0) {
+      fail('NOT_CONFORMANT', `Document rejected — conformance issues: ${issues.join('; ')}`);
+    }
+
+    try {
+      fs.mkdirSync(path.dirname(absPath), { recursive: true });
+      fs.writeFileSync(absPath, markdown, 'utf-8');
+    } catch (e) {
+      fail('WRITE_ERROR', `Could not write file: ${absPath} — ${e.message}`);
+    }
+
+    indexFile(db, r.name, absPath); // new file — indexFile parses and inserts
+    return { ok: true, file: absPath };
   });
 }
 

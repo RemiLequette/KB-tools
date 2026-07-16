@@ -2,7 +2,7 @@
  * server.js
  *
  * MCP server entry point for the doc index — registers search, list_triggers,
- * read_section, write_section, reindex as MCP tools over stdio.
+ * read_section, write_section, create_document, reindex as MCP tools over stdio.
  *
  * Registered in the AI client under the name `kb-doc-index`.
  *
@@ -22,7 +22,7 @@ import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 
-import { createContext, search, listTriggers, readSection, writeSection, reindex } from './tools.js';
+import { createContext, search, listTriggers, readSection, writeSection, createDocument, reindex } from './tools.js';
 
 const __dirname     = path.dirname(fileURLToPath(import.meta.url));
 const REPOS_JSON    = path.join(__dirname, 'repos.json');
@@ -86,11 +86,11 @@ server.registerTool(
   'read_section',
   {
     title: 'Read a document section',
-    description: 'Reads one section\'s content from a Markdown document, by repo-relative or absolute file path. A section is a ## or ### heading.',
+    description: 'Reads one section\'s content from a Markdown document, by repo-relative or absolute file path. A section is a ## or ### heading. IMPORTANT: if the ## has ### subsections, its own path returns only its direct content (the text before the first ###) — subsections are separate, addressed independently; the ## path never includes them.',
     inputSchema: {
       repo: z.string().describe('Repo name (see repos.json).'),
       file: z.string().describe('File path, relative to the repo root (or absolute).'),
-      section: z.string().describe('Full section path: "Document Title/Heading" for a ## section, or "Document Title/Heading/Subheading" for a ### subsection. Bare heading names are not accepted.'),
+      section: z.string().describe('Full section path: "Document Title/Heading" for a ## section, or "Document Title/Heading/Subheading" for a ### subsection. Bare heading names are not accepted. If the ## has ### subsections, this path returns only the ##\'s own direct content (before its first ###) — read each ### subsection with its own path to get its content.'),
     },
   },
   async ({ repo, file, section }) => {
@@ -103,18 +103,40 @@ server.registerTool(
   'write_section',
   {
     title: 'Write a document section',
-    description: 'Creates, overwrites, inserts, or deletes a ## or ### section, then writes the file — rejected if the resulting document fails conformance (getIssues).',
+    description: 'Creates, overwrites, inserts, or deletes a ## or ### section, then writes the file — rejected if the resulting document fails conformance (getIssues). IMPORTANT: mode=set on a ## path replaces its ENTIRE subtree — content may itself embed ### headings, which become the new subsections, and any pre-existing subsection absent from the new content is removed (including all of them, if content has no ### at all). To only change the ##\'s own intro text without touching its subsections, write each ### subsection separately instead.',
     inputSchema: {
       repo: z.string().describe('Repo name (see repos.json).'),
       file: z.string().describe('File path, relative to the repo root (or absolute).'),
       section: z.string().describe('Full section path: "Document Title/Heading" for a ## section, or "Document Title/Heading/Subheading" for a ### subsection. Bare heading names are not accepted. For mode=insert, this is the path being created; a new ### requires its parent ## to already exist.'),
-      content: z.string().optional().describe('New section body. Ignored when mode=delete.'),
+      content: z.string().optional().describe('New section body. Ignored when mode=delete. For a ## path with mode=set, this replaces the whole subtree: embed ### headings here to define the section\'s new subsections, or omit them entirely to clear all existing subsections. For a ### path, this only ever replaces that subsection\'s own lines.'),
       mode: z.enum(['set', 'insert', 'delete']).optional().describe('set (default): create or overwrite. insert: requires position. delete: removes the section (blocked for mandatory sections).'),
       position: z.string().optional().describe('Required when mode=insert. "beginning", "before:<Section Path>", or "after:<Section Path>" — the reference must be a sibling (same parent).'),
     },
   },
   async ({ repo, file, section, content, mode, position }) => {
     try { return ok(writeSection(ctx, { repo, file, section, content, mode, position })); }
+    catch (e) { return err(e); }
+  }
+);
+
+server.registerTool(
+  'create_document',
+  {
+    title: 'Create a new document',
+    description: 'Scaffolds a brand-new conformant Markdown document — title, optional subtitle/document-type/language preamble, and the two conformance-required sections (## Quick Start, ## Load when) — then writes and indexes it. Fails with FILE_EXISTS if the target path already exists; use write_section to edit an existing document instead.',
+    inputSchema: {
+      repo: z.string().describe('Repo name (see repos.json).'),
+      file: z.string().describe('File path for the new document, relative to the repo root (or absolute). Must not already exist.'),
+      title: z.string().describe('Document title — becomes the # heading.'),
+      quickStart: z.string().describe('Content of the mandatory ## Quick Start section — 3 to 6 lines describing theme, scope, and when to load the document (see conventions/documentation.md [section Quick Start Rule]).'),
+      loadWhen: z.string().describe('Content of the mandatory ## Load when section — one trigger phrase per line, each describing a situation that warrants loading the document.'),
+      subtitle: z.string().optional().describe('Optional short plain-text subtitle, placed immediately under the title.'),
+      documentType: z.string().optional().describe('Optional document type (see conventions/documentation-style.md [section Document Taxonomy]) — rendered as *Document type: <value>*.'),
+      language: z.string().optional().describe('Optional language declaration, only needed when the document is not in English — rendered as *Language: <value>*.'),
+    },
+  },
+  async ({ repo, file, title, quickStart, loadWhen, subtitle, documentType, language }) => {
+    try { return ok(createDocument(ctx, { repo, file, title, quickStart, loadWhen, subtitle, documentType, language })); }
     catch (e) { return err(e); }
   }
 );

@@ -14,7 +14,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 import {
-  createContext, search, listTriggers, readSection, writeSection, reindex,
+  createContext, search, listTriggers, readSection, writeSection, createDocument, reindex,
 } from '../mcp-doc-index/tools.js';
 
 const __dirname  = path.dirname(fileURLToPath(import.meta.url));
@@ -119,6 +119,12 @@ describe('readSection', () => {
     expect(() => readSection(ctx, { repo: 'nope', file: 'conventions/alpha.md', section: 'Alpha Convention/Why' }))
       .toThrow(/REPO_NOT_FOUND/);
   });
+
+  // @convention conventions/mcp-doc-index.md [## How — Implementation > Design decisions > TOC and [[#Quick Start]] wikilink generation]
+  it('throws RESERVED_SECTION for the tool-generated Table of Contents path', () => {
+    expect(() => readSection(ctx, { repo: 'kb', file: 'conventions/alpha.md', section: 'Alpha Convention/Table of Contents' }))
+      .toThrow(/RESERVED_SECTION/);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -206,6 +212,130 @@ describe('writeSection', () => {
     writeSection(ctx, { repo: 'kb', file: 'conventions/alpha.md', section: 'Alpha Convention/Why', content: 'Searchable update xyz123.' });
     const result = search(ctx, { query: 'xyz123', repo: 'kb' });
     expect(result.section_matches.length).toBeGreaterThan(0);
+  });
+
+  // @convention T-017 Bug 4 — write_section on Table of Contents silently created a
+  // phantom section in doc.sections (setSectionByPath's create-new-section branch,
+  // since "Table of Contents" is never a real section), producing a duplicate
+  // "## Table of Contents" heading instead of the reported "ok: true, no visible change".
+  it('regression: rejects mode=set on the Table of Contents path instead of creating a phantom duplicate section', () => {
+    expect(() => writeSection(ctx, {
+      repo: 'kb', file: 'conventions/alpha.md', section: 'Alpha Convention/Table of Contents', content: '- [[#Why]]',
+    })).toThrow(/RESERVED_SECTION/);
+    const raw = fs.readFileSync(SANDBOX_ALPHA(), 'utf-8');
+    expect((raw.match(/## Table of Contents/g) || []).length).toBeLessThanOrEqual(1);
+  });
+
+  it('regression: rejects mode=insert on the Table of Contents path', () => {
+    expect(() => writeSection(ctx, {
+      repo: 'kb', file: 'conventions/alpha.md', section: 'Alpha Convention/Table of Contents', content: 'X.',
+      mode: 'insert', position: 'beginning',
+    })).toThrow(/RESERVED_SECTION/);
+  });
+
+  it('regression: rejects mode=delete on the Table of Contents path', () => {
+    expect(() => writeSection(ctx, {
+      repo: 'kb', file: 'conventions/alpha.md', section: 'Alpha Convention/Table of Contents', mode: 'delete',
+    })).toThrow(/RESERVED_SECTION/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// createDocument
+// ---------------------------------------------------------------------------
+
+describe('createDocument', () => {
+  let writableRoot;
+
+  beforeEach(() => {
+    // Point repos.json at a writable sandbox repo instead of the read-only fixtures.
+    writableRoot = path.join(SANDBOX, 'repo');
+    fs.mkdirSync(writableRoot, { recursive: true });
+    reposJsonPath = path.join(SANDBOX, 'repos-writable.json');
+    fs.writeFileSync(reposJsonPath, JSON.stringify([
+      { name: 'kb', root: writableRoot, db: path.join(SANDBOX, 'kb-writable.db') },
+    ]));
+    ctx.close();
+    ctx = createContext(reposJsonPath);
+  });
+
+  it('scaffolds a new conformant document with Quick Start and Load when', () => {
+    const result = createDocument(ctx, {
+      repo: 'kb', file: 'conventions/gamma.md', title: 'Gamma Convention',
+      quickStart: 'Covers the gamma widget.', loadWhen: 'Creating a gamma widget',
+    });
+    expect(result.ok).toBe(true);
+
+    const raw = fs.readFileSync(path.join(writableRoot, 'conventions/gamma.md'), 'utf-8');
+    expect(raw).toContain('# Gamma Convention');
+    expect(raw).toContain('## Quick Start');
+    expect(raw).toContain('Covers the gamma widget.');
+    expect(raw).toContain('## Load when');
+    expect(raw).toContain('Creating a gamma widget');
+    expect(raw).toContain('## Table of Contents');
+
+    const content = readSection(ctx, { repo: 'kb', file: 'conventions/gamma.md', section: 'Gamma Convention/Quick Start' });
+    expect(content).toBe('Covers the gamma widget.');
+  });
+
+  it('includes optional subtitle, documentType, and language in the preamble', () => {
+    createDocument(ctx, {
+      repo: 'kb', file: 'conventions/delta.md', title: 'Delta Convention',
+      subtitle: 'A short description.', documentType: 'Convention', language: 'French',
+      quickStart: 'Covers delta.', loadWhen: 'Working with delta',
+    });
+    const raw = fs.readFileSync(path.join(writableRoot, 'conventions/delta.md'), 'utf-8');
+    expect(raw).toContain('A short description.');
+    expect(raw).toContain('*Document type: Convention*');
+    expect(raw).toContain('*Language: French*');
+  });
+
+  it('indexes the new file so it is immediately searchable', () => {
+    createDocument(ctx, {
+      repo: 'kb', file: 'conventions/epsilon.md', title: 'Epsilon Convention',
+      quickStart: 'Searchable epsilon marker xyz789.', loadWhen: 'Working with epsilon',
+    });
+    const result = search(ctx, { query: 'xyz789', repo: 'kb' });
+    expect(result.section_matches.length).toBeGreaterThan(0);
+  });
+
+  it('throws FILE_EXISTS when the target file already exists', () => {
+    createDocument(ctx, {
+      repo: 'kb', file: 'conventions/zeta.md', title: 'Zeta Convention',
+      quickStart: 'Covers zeta.', loadWhen: 'Working with zeta',
+    });
+    expect(() => createDocument(ctx, {
+      repo: 'kb', file: 'conventions/zeta.md', title: 'Zeta Convention Again',
+      quickStart: 'Covers zeta again.', loadWhen: 'Working with zeta again',
+    })).toThrow(/FILE_EXISTS/);
+  });
+
+  it('throws MISSING_ARG when title is missing', () => {
+    expect(() => createDocument(ctx, {
+      repo: 'kb', file: 'conventions/eta.md', title: '',
+      quickStart: 'Covers eta.', loadWhen: 'Working with eta',
+    })).toThrow(/MISSING_ARG/);
+  });
+
+  it('throws MISSING_ARG when quickStart is missing', () => {
+    expect(() => createDocument(ctx, {
+      repo: 'kb', file: 'conventions/theta.md', title: 'Theta Convention',
+      quickStart: '', loadWhen: 'Working with theta',
+    })).toThrow(/MISSING_ARG/);
+  });
+
+  it('throws MISSING_ARG when loadWhen is missing', () => {
+    expect(() => createDocument(ctx, {
+      repo: 'kb', file: 'conventions/iota.md', title: 'Iota Convention',
+      quickStart: 'Covers iota.', loadWhen: '',
+    })).toThrow(/MISSING_ARG/);
+  });
+
+  it('throws REPO_NOT_FOUND for an unknown repo', () => {
+    expect(() => createDocument(ctx, {
+      repo: 'nope', file: 'conventions/kappa.md', title: 'Kappa Convention',
+      quickStart: 'Covers kappa.', loadWhen: 'Working with kappa',
+    })).toThrow(/REPO_NOT_FOUND/);
   });
 });
 
