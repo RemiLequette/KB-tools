@@ -1,0 +1,56 @@
+{
+  "nodes": [
+    {
+      "id": "nodeIntro",
+      "type": "file",
+      "file": "tools/canvas-player-demo/Node Intro.md",
+      "x": -300,
+      "y": 0,
+      "width": 250,
+      "height": 150
+    },
+    {
+      "id": "nodeConcept",
+      "type": "file",
+      "file": "tools/canvas-player-demo/Node Concept.md",
+      "x": 100,
+      "y": -200,
+      "width": 250,
+      "height": 150
+    },
+    {
+      "id": "nodeConclusion",
+      "type": "file",
+      "file": "tools/canvas-player-demo/Node Conclusion.md",
+      "x": 100,
+      "y": 100,
+      "width": 250,
+      "height": 150
+    },
+    {
+      "id": "groupDemo",
+      "type": "group",
+      "label": "Core Ideas",
+      "x": 50,
+      "y": -250,
+      "width": 350,
+      "height": 600
+    }
+  ],
+  "edges": [
+    {
+      "id": "edgeIntroConcept",
+      "fromNode": "nodeIntro",
+      "fromSide": "right",
+      "toNode": "nodeConcept",
+      "toSide": "left"
+    },
+    {
+      "id": "edgeConceptConclusion",
+      "fromNode": "nodeConcept",
+      "fromSide": "bottom",
+      "toNode": "nodeConclusion",
+      "toSide": "top"
+    }
+  ]
+}

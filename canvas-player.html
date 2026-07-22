@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Canvas Player</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: var(--cp-bg, #1e1e1e); font-family: sans-serif; }
+  #stage { position: absolute; inset: 0; }
+  #viewport { width: 100%; height: 100%; display: block; cursor: pointer; }
+  .cp-node-shape { transition: fill 0.2s, stroke 0.2s; }
+  .cp-node-text { fill: var(--cp-text, #fff); pointer-events: none; user-select: none; text-anchor: middle; dominant-baseline: middle; }
+  .cp-node-body { fill: var(--cp-text, #fff); opacity: 0.8; pointer-events: none; user-select: none; text-anchor: middle; dominant-baseline: middle; }
+  .cp-icon-badge { fill: rgba(255,255,255,0.85); }
+  .cp-icon-letter { fill: #222; font-weight: bold; text-anchor: middle; dominant-baseline: middle; pointer-events: none; }
+  .cp-edge { stroke: var(--cp-edge, #888); stroke-width: var(--cp-edge-width, 1.5); fill: none; }
+  .cp-edge-arrow { fill: var(--cp-edge, #888); }
+  #overlay {
+    position: absolute; top: 12px; left: 12px; z-index: 10;
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(30,30,30,0.75); border-radius: 8px; padding: 6px 10px;
+    font-size: 13px; color: #eee; pointer-events: auto;
+    transition: opacity 0.25s ease;
+  }
+  #overlay.idle { opacity: 0; }
+  #overlay button, #overlay select {
+    background: #333; color: #eee; border: 1px solid #555; border-radius: 4px;
+    padding: 3px 8px; cursor: pointer; font-size: 13px;
+  }
+  #overlay button:hover { background: #444; }
+  #status-dot { width: 9px; height: 9px; border-radius: 50%; background: #888; display: inline-block; }
+  #status-dot.ok { background: #4caf50; }
+  #status-dot.down { background: #e07b39; }
+  #status-dot.error { background: #d9534f; }
+  #step-label { opacity: 0.8; min-width: 3em; text-align: center; }
+  #step-nav { display: flex; align-items: center; gap: 3px; }
+  #step-input {
+    width: 2.6em; background: #333; color: #eee; border: 1px solid #555; border-radius: 4px;
+    padding: 3px 4px; font-size: 13px; text-align: center;
+  }
+  #step-input::-webkit-outer-spin-button, #step-input::-webkit-inner-spin-button { margin: 0; }
+  #step-total { opacity: 0.8; }
+  #step-select { max-width: 12em; }
+
+  #browser {
+    display: none;
+    position: absolute; inset: 0; z-index: 20;
+    background: rgba(20,20,20,0.92);
+    align-items: center; justify-content: center;
+    font-size: 14px; color: #eee;
+  }
+  #browser.open { display: flex; }
+  #browser-panel {
+    width: min(560px, 90vw); max-height: 80vh; display: flex; flex-direction: column;
+    background: #262626; border: 1px solid #444; border-radius: 8px; overflow: hidden;
+  }
+  #browser-vaults { padding: 10px 12px; border-bottom: 1px solid #3a3a3a; display: flex; gap: 6px; }
+  #browser-vaults select { flex: 1; background: #1c1c1c; color: #eee; border: 1px solid #444; border-radius: 4px; padding: 4px 8px; }
+  #browser-header { padding: 10px 12px; border-bottom: 1px solid #3a3a3a; display: flex; gap: 6px; }
+  #browser-path { flex: 1; background: #1c1c1c; color: #eee; border: 1px solid #444; border-radius: 4px; padding: 4px 8px; font-family: monospace; font-size: 12px; }
+  #browser-vaults button, #browser-header button { background: #3a3a3a; color: #eee; border: 1px solid #555; border-radius: 4px; padding: 4px 10px; cursor: pointer; }
+  #browser-list { overflow-y: auto; padding: 4px 0; }
+  #browser-list div { padding: 6px 14px; cursor: pointer; }
+  #browser-list div:hover { background: #333; }
+  #browser-list .dir::before { content: "📁 "; }
+  #browser-list .md::before { content: "📄 "; }
+  #browser-footer { padding: 8px 12px; border-top: 1px solid #3a3a3a; text-align: right; }
+  #browser-footer button { background: #3a3a3a; color: #eee; border: 1px solid #555; border-radius: 4px; padding: 4px 12px; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <svg id="viewport" xmlns="http://www.w3.org/2000/svg"></svg>
+</div>
+
+<div id="overlay">
+  <span id="status-dot" title="Local server status"></span>
+  <button id="btn-open" title="Open a presentation script">Open script</button>
+  <button id="btn-reload" title="Reload script, canvas, and micro-notes from disk">⟳</button>
+  <button id="btn-prev" title="Previous step">◀</button>
+  <span id="step-nav">
+    <input id="step-input" type="number" min="1" step="1" title="Go to step (Enter to jump)">
+    <span id="step-total">/ –</span>
+  </span>
+  <button id="btn-next" title="Next step">▶</button>
+  <select id="step-select" title="Jump to a step by its label"></select>
+  <select id="lang-select" title="Presentation language">
+    <option value="en">EN</option>
+    <option value="fr">FR</option>
+  </select>
+</div>
+
+<div id="browser">
+  <div id="browser-panel">
+    <div id="browser-vaults">
+      <select id="vault-select"><option value="">— Favorite vaults —</option></select>
+      <button id="vault-save" title="Save the current folder as a favorite vault">☆ Save</button>
+      <button id="vault-remove" title="Remove the selected favorite">✕</button>
+    </div>
+    <div id="browser-header">
+      <input id="browser-path" type="text" placeholder="Absolute starting folder, e.g. I:\...\100-RDT4BVault" />
+      <button id="browser-go">Go</button>
+      <button id="browser-up">↑ Up</button>
+    </div>
+    <div id="browser-list"></div>
+    <div id="browser-footer">
+      <button id="browser-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!--
+  Opened directly, e.g. http://localhost:3000/C:/.../KB-tools/canvas-player.html
+  Click "Open script" to browse for a presentation script (.md) via the local
+  server's /dir API — the canvas is then read from the script's own front
+  matter, the vault root is auto-detected (nearest parent folder containing
+  .obsidian). A dropdown of favorite vault roots (saved in localStorage)
+  speeds up navigation across several vaults. Optional query params
+  script=<absolute path>&vault=<absolute path> skip the picker and load
+  directly — see canvas-player.js header.
+-->
+<script type="module" src="canvas-player.js"></script>
+
+</body>
+</html>

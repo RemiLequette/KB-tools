@@ -66,8 +66,8 @@ const CORS_HEADERS = {
 };
 
 function send(res, status, body, contentType) {
-  const isString = typeof body === 'string';
-  const data     = isString ? body : JSON.stringify(body);
+  const isRaw    = typeof body === 'string' || Buffer.isBuffer(body);
+  const data     = isRaw ? body : JSON.stringify(body);
   const ct       = contentType || 'application/json; charset=utf-8';
   res.writeHead(status, { 'Content-Type': ct, ...CORS_HEADERS });
   res.end(data);

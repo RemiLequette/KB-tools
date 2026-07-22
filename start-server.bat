@@ -11,6 +11,7 @@ REM   (Win+R -> shell:startup)
 node "%~dp0local-server.js" ^
   "C:\Users\RemiLequette\Dropbox\AfrSCM2026_1.70_INVITE-ES_RSE" ^
   "C:\Users\RemiLequette\Development" ^
+  "I:\Shared drives\T4B-Shared" ^
   --port 3000
 
 pause

@@ -3,7 +3,7 @@
     "name": "kb",
     "root": "I:\\Shared drives\\T4B-Shared\\100-RDT4BVault\\KB",
     "db": "../data/kb.db",
-    "exclude": ["TODO", "CHANGELOG", "Journal", "ARCHIVE"]
+    "exclude": ["TODO", "CHANGELOG", "Journal", "ARCHIVE", "tools/canvas-player-demo"]
   },
   {
     "name": "scflow",

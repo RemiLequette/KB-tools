@@ -14,6 +14,7 @@ export default defineConfig({
       'tests/code-indexer.test.js',
       'tests/mcp-code-index-tools.test.js',
       'tests/fs-scan.test.js',
+      'tests/canvas-player-core.test.js',
     ],
     exclude: ['tests/forge/**'],
   },
