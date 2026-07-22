@@ -10,6 +10,11 @@
  *
  * References (documents used to design this script):
  *   - tools/canvas-player.md (full spec)
+ *   - tools/canvas-player.md [section Micro-note Front Matter/Style resolution]
+ *   - tools/canvas-player.md [section Style Note Front Matter]
+ *   - tools/canvas-player.md [section Style Mapper Front Matter]
+ *   - tools/canvas-player.md [section Badge Note Front Matter]
+ *   - tools/canvas-player.md [section Badge Mapper Front Matter]
  *   - conventions/local-server.md [section API Contract, section Building API paths in pages]
  *   - conventions/color-palette.md
  *   - lib/canvas-player-core.js
@@ -47,7 +52,11 @@ import {
   parseFrontMatter,
   extractWikilinkTarget,
   resolveWikilink,
-  resolveMicroNoteStyle,
+  parseStyleMapper,
+  resolveNodeStyleTarget,
+  parseBadgeMapper,
+  resolveNodeBadgeTarget,
+  composeNodeStyle,
   resolveText,
   parseMicroNoteBody,
   resolveBody,
@@ -56,16 +65,20 @@ import {
   parsePalette,
   mergePalettes,
   resolveStyleColors,
+  resolveBadgeColors,
   resolveTheme,
   resolveTransitionDuration,
   parsePresentationScript,
   buildNodeLookup,
   buildGroupLookup,
+  buildNodeConditionsLookup,
+  buildNodeFileById,
   resolveScriptSteps,
   buildGroupMembership,
   applyStepDeltas,
   computeEdgePath,
   resolveEdgeOffsets,
+  badgeAnchorPoint,
   computeFitBox,
 } from './lib/canvas-player-core.js';
 
@@ -248,6 +261,13 @@ const state = {
 const PADDING = 60;
 let transitionDurationMs = 1000; // resolved from the script's front matter, see tools/canvas-player.md [section Script Format]
 
+// Step position across a Reload — kept in memory only, for the current page
+// session, never written to localStorage (unlike the last script/last
+// language, see getLastScript()/getLastLang() above): set by the Reload
+// button just before loadPresentation() runs, consumed and cleared at the
+// end of loadPresentation() — see tools/canvas-player.md [section Controls].
+let reloadStepIndex = null;
+
 // ---------------------------------------------------------------------------
 // Theme — see tools/canvas-player.md [section Script Format]
 // ---------------------------------------------------------------------------
@@ -287,9 +307,9 @@ async function loadIcon(name) {
   }
 }
 
-/** Pre-fetches every distinct icon used by the given nodes, once, before the first render. */
+/** Pre-fetches every distinct icon used by the given nodes, once, before the first render — both a node's own content icon and its resolved badge icon, if any, see tools/canvas-player.md [section Badge Note Front Matter]. */
 async function preloadIcons(nodes) {
-  const names = [...new Set(nodes.map(n => n.style.icon).filter(Boolean))];
+  const names = [...new Set(nodes.flatMap(n => [n.style.icon, n.badge && n.badge.icon]).filter(Boolean))];
   await Promise.all(names.map(loadIcon));
 }
 
@@ -347,6 +367,41 @@ async function loadPresentation() {
     throw new Error(`${scriptPath}: ${err.message}`);
   }
   applyTheme(theme);
+
+  // `style-mapper` — zero or one style-mapper note, resolved vault-wide the
+  // same way as the canvas and micro-notes, then parsed into its tag rules
+  // and `default` entry — see tools/canvas-player.md [section Style Mapper
+  // Front Matter]. Absent `style-mapper` yields an empty mapper, so a node
+  // relying on tags or on `default` (rather than a direct `style`) fails
+  // loudly in resolveNodeStyleTarget() below, same as an unresolved
+  // wikilink.
+  let styleMapper = { entries: [], defaultTarget: null };
+  if (script['style-mapper']) {
+    const mapperTarget = extractWikilinkTarget(script['style-mapper']);
+    const mapperRelPath = resolveWikilink(mapperTarget, vaultIndex);
+    try {
+      styleMapper = parseStyleMapper(parseFrontMatter(await readFile(joinPath(vaultRoot, mapperRelPath))));
+    } catch (err) {
+      throw new Error(`${mapperRelPath}: ${err.message}`);
+    }
+  }
+  // `badge-mapper` — zero or one badge-mapper note, resolved vault-wide the
+  // same way as style-mapper, then parsed into its condition-matching
+  // entries — see tools/canvas-player.md [section Badge Mapper Front
+  // Matter]. Absent `badge-mapper` yields an empty mapper, so every node
+  // simply has no badge (not an error, unlike an unresolved style) — see
+  // resolveNodeBadgeTarget() in lib/canvas-player-core.js.
+  let badgeMapper = { entries: [] };
+  if (script['badge-mapper']) {
+    const badgeMapperTarget = extractWikilinkTarget(script['badge-mapper']);
+    const badgeMapperRelPath = resolveWikilink(badgeMapperTarget, vaultIndex);
+    try {
+      badgeMapper = parseBadgeMapper(parseFrontMatter(await readFile(joinPath(vaultRoot, badgeMapperRelPath))));
+    } catch (err) {
+      throw new Error(`${badgeMapperRelPath}: ${err.message}`);
+    }
+  }
+
   transitionDurationMs = resolveTransitionDuration(script) * 1000;
   state.edgeOffsets = resolveEdgeOffsets(script);
 
@@ -360,28 +415,46 @@ async function loadPresentation() {
   const groupNodes = canvasJson.nodes.filter(n => n.type === 'group');
   const nodeLookup = buildNodeLookup(fileNodes);
   const groupLookup = buildGroupLookup(groupNodes);
-  state.steps = resolveScriptSteps(script.steps, { nodeLookup, groupLookup, vaultIndex });
+
+  // Micro-note front matter is read once, up front, for every file node —
+  // needed both for condition-group script-target matching ({tag,
+  // key:value}, see tools/canvas-player.md [section Script Format]) and,
+  // below, for style/badge resolution — the same fetch backs both, rather
+  // than reading each micro-note twice.
+  const microNoteData = await Promise.all(fileNodes.map(async node => {
+    const noteText = await readFile(joinPath(vaultRoot, node.file));
+    return { id: node.id, localFm: parseFrontMatter(noteText), noteText };
+  }));
+  const nodeConditionsLookup = buildNodeConditionsLookup(microNoteData);
+  const nodeFileById = buildNodeFileById(fileNodes);
+
+  state.steps = resolveScriptSteps(script.steps, {
+    nodeLookup, groupLookup, vaultIndex,
+    nodeConditionsLookup, groupMembership: state.groupMembership, nodeFileById,
+  });
   populateStepSelect();
 
-  state.canvasNodes = await Promise.all(fileNodes.map(async node => {
-    const noteAbsPath = joinPath(vaultRoot, node.file);
-    const noteText = await readFile(noteAbsPath);
-    const localFm = parseFrontMatter(noteText);
+  const microNoteById = new Map(microNoteData.map(m => [m.id, m]));
 
-    let baseFm = null;
-    if (localFm.style) {
-      const styleRelPath = resolveWikilink(extractWikilinkTarget(localFm.style), vaultIndex);
-      const styleAbsPath = joinPath(vaultRoot, styleRelPath);
-      baseFm = parseFrontMatter(await readFile(styleAbsPath));
-    }
+  state.canvasNodes = await Promise.all(fileNodes.map(async node => {
+    const { localFm, noteText } = microNoteById.get(node.id);
 
     let style;
     try {
-      style = resolveStyleColors(resolveMicroNoteStyle(localFm, baseFm), palette);
+      // Style resolution order — direct `style:`, else the style-mapper
+      // entry matching `tags`, else the style-mapper's `default` — see
+      // tools/canvas-player.md [section Micro-note Front Matter/Style
+      // resolution]. The resolved style note is then read the same
+      // vault-wide way as any other wikilink target, and its visual
+      // properties are combined with the micro-note's own content fields.
+      const styleTarget = resolveNodeStyleTarget(localFm, styleMapper);
+      const styleRelPath = resolveWikilink(styleTarget, vaultIndex);
+      const styleFm = parseFrontMatter(await readFile(joinPath(vaultRoot, styleRelPath)));
+      style = resolveStyleColors(composeNodeStyle(localFm, styleFm), palette);
     } catch (err) {
       // Adds the micro-note's own path to the error — not known inside
-      // resolveStyleColors() itself, which stays pure/file-agnostic, see
-      // lib/canvas-player-core.js.
+      // resolveNodeStyleTarget()/resolveStyleColors() themselves, which stay
+      // pure/file-agnostic, see lib/canvas-player-core.js.
       throw new Error(`${node.file}: ${err.message}`);
     }
 
@@ -396,11 +469,30 @@ async function loadPresentation() {
       style.imageUrl = `/file?path=${encodeURIComponent(toServerPath(imageAbsPath))}`;
     }
 
+    // Badge resolution — independent of style resolution above, via the
+    // presentation's badge-mapper (if set) — see tools/canvas-player.md
+    // [section Badge Mapper Front Matter]. No match (or no `badge-mapper`
+    // set at all) simply means no badge for this node, not an error.
+    let badge = null;
+    try {
+      const badgeTarget = resolveNodeBadgeTarget(localFm, badgeMapper);
+      if (badgeTarget) {
+        const badgeRelPath = resolveWikilink(badgeTarget, vaultIndex);
+        const badgeFm = parseFrontMatter(await readFile(joinPath(vaultRoot, badgeRelPath)));
+        badge = resolveBadgeColors(badgeFm, palette);
+      }
+    } catch (err) {
+      // Adds the micro-note's own path to the error, same treatment as the
+      // style-resolution try/catch above.
+      throw new Error(`${node.file}: ${err.message}`);
+    }
+
     return {
       id: node.id,
       x: node.x, y: node.y, width: node.width, height: node.height,
       style,
       body: parseMicroNoteBody(noteText), // per-language body sections (## en / ## fr), see tools/canvas-player.md [section Micro-note Front Matter]
+      badge, // resolved badge (icon/color/position), or null — see tools/canvas-player.md [section Badge Note Front Matter]
     };
   }));
 
@@ -410,12 +502,19 @@ async function loadPresentation() {
 
   saveLastScript(scriptPath, vaultRoot);
 
-  // Apply Step 0 — see tools/canvas-player.md [section How It Works], step 5
+  // Apply Step 0, or restore the step a Reload was triggered from when it
+  // is still valid for the reloaded script (same or greater step count) —
+  // see tools/canvas-player.md [section How It Works], step 5, and
+  // [section Controls]. A restore index no longer valid (the script now
+  // has fewer steps) falls back to Step 0, same as a first load.
   state.stepIndex = -1;
   state.visible = new Set();
   state.focus = new Set();
   state.viewBox = null;
-  goToStep(0, 'cut');
+  const restoreIndex = reloadStepIndex;
+  reloadStepIndex = null;
+  const startIndex = restoreIndex !== null && restoreIndex < state.steps.length ? restoreIndex : 0;
+  goToStep(startIndex, 'cut');
 }
 
 // ---------------------------------------------------------------------------
@@ -513,6 +612,14 @@ function nextStep() {
 
 function prevStep() {
   if (state.stepIndex > 0) goToStep(state.stepIndex - 1);
+}
+
+function firstStep() {
+  goToStep(0, 'cut');
+}
+
+function lastStep() {
+  goToStep(state.steps.length - 1, 'cut');
 }
 
 // ---------------------------------------------------------------------------
@@ -794,6 +901,45 @@ function renderNode(svg, node) {
     });
     g.appendChild(bodyEl);
   }
+
+  // Badge — small additive decoration for a visual exception, resolved
+  // independently of style in loadPresentation(); drawn last, above
+  // everything else in the node, anchored at its `position` on the node's
+  // bounding box regardless of `shape` — see tools/canvas-player.md
+  // [section Badge Note Front Matter] and [section How It Works].
+  if (node.badge) {
+    const badgeRadius = typeof node.badge.size === 'number' ? node.badge.size : 12;
+    const anchor = badgeAnchorPoint(node, node.badge.position, node.badge.offset || 0);
+
+    const badgeCircle = document.createElementNS(SVG_NS, 'circle');
+    badgeCircle.setAttribute('class', 'cp-badge');
+    badgeCircle.setAttribute('cx', anchor.x);
+    badgeCircle.setAttribute('cy', anchor.y);
+    badgeCircle.setAttribute('r', badgeRadius);
+    badgeCircle.setAttribute('fill', node.badge.color || '#e11d48');
+    g.appendChild(badgeCircle);
+
+    const badgeIconSize = badgeRadius * 1.2;
+    const badgeIconSvg = iconCache.get(node.badge.icon);
+    if (badgeIconSvg) {
+      const icon = badgeIconSvg.cloneNode(true);
+      icon.setAttribute('x', anchor.x - badgeIconSize / 2);
+      icon.setAttribute('y', anchor.y - badgeIconSize / 2);
+      icon.setAttribute('width', badgeIconSize);
+      icon.setAttribute('height', badgeIconSize);
+      icon.setAttribute('stroke', '#fff');
+      icon.style.pointerEvents = 'none';
+      g.appendChild(icon);
+    } else {
+      const letter = document.createElementNS(SVG_NS, 'text');
+      letter.setAttribute('class', 'cp-badge-letter');
+      letter.setAttribute('x', anchor.x);
+      letter.setAttribute('y', anchor.y);
+      letter.setAttribute('font-size', badgeIconSize * 0.9);
+      letter.textContent = node.badge.icon.charAt(0).toUpperCase();
+      g.appendChild(letter);
+    }
+  }
 }
 
 function renderEdges(svg) {
@@ -1009,12 +1155,15 @@ function wireControls() {
   document.getElementById('btn-open').addEventListener('click', openBrowser);
   document.getElementById('btn-reload').addEventListener('click', async () => {
     if (!scriptPath) { openBrowser(); return; }
+    reloadStepIndex = state.stepIndex >= 0 ? state.stepIndex : null;
     document.getElementById('status-dot').className = '';
     await loadPresentation();
     await updateStatusDot();
   });
+  document.getElementById('btn-first').addEventListener('click', firstStep);
   document.getElementById('btn-prev').addEventListener('click', prevStep);
   document.getElementById('btn-next').addEventListener('click', nextStep);
+  document.getElementById('btn-last').addEventListener('click', lastStep);
   document.getElementById('viewport').addEventListener('click', nextStep);
   document.getElementById('step-input').addEventListener('keydown', e => {
     if (e.key === 'Enter') jumpToStepInput();

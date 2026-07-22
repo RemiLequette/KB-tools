@@ -1,5 +1,10 @@
 ---
 canvas: "[[Demo.canvas]]"
+theme: light
+background: "#e8ede84d"
+edge-color: "#1a281a"
+edge-width: 5
+style-mapper: "[[Style Mapper]]"
 ---
 
 ## Step 0

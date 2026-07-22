@@ -18,7 +18,13 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import {
   parseFrontMatter,
-  resolveMicroNoteStyle,
+  parseTagList,
+  parseConditionList,
+  parseStyleMapper,
+  buildNodeConditions,
+  resolveConditionStyleTarget,
+  resolveNodeStyleTarget,
+  composeNodeStyle,
   resolveText,
   parseMicroNoteBody,
   resolveBody,
@@ -37,6 +43,9 @@ import {
   classifyReference,
   buildNodeLookup,
   buildGroupLookup,
+  buildNodeConditionsLookup,
+  buildNodeFileById,
+  resolveConditionGroupIds,
   resolveScriptSteps,
   parsePresentationScript,
   buildGroupMembership,
@@ -60,20 +69,21 @@ function readFixture(name) {
 
 describe('parseFrontMatter', () => {
   // @convention tools/canvas-player.md [section Micro-note Front Matter]
-  it('parses flat scalar fields, quoted and unquoted', () => {
+  it('parses tags, icon, and text fields from a micro-note', () => {
     const fm = parseFrontMatter(readFixture('Node Intro.md'));
-    expect(fm.shape).toBe('rounded');
-    expect(fm.fill).toBe('#4A90D9');
-    expect(fm['stroke-width']).toBe(2);
+    expect(fm.tags).toEqual(['warning']);
     expect(fm.icon).toBe('play');
     expect(fm.text).toBe('Introduction');
     expect(fm['text-fr']).toBe('Introduction');
   });
 
-  // @convention tools/canvas-player.md [section Micro-note Front Matter]
-  it('parses flat number properties (text-size, text-bold)', () => {
-    const fm = parseFrontMatter(readFixture('Node Intro.md'));
-    expect(fm['text-size']).toBe(16);
+  // @convention tools/canvas-player.md [section Style Note Front Matter]
+  it("parses a style note's flat scalar and number fields, quoted and unquoted", () => {
+    const fm = parseFrontMatter(readFixture('Style Warning.md'));
+    expect(fm.shape).toBe('rounded');
+    expect(fm.fill).toBe('#c0392b33');
+    expect(fm['stroke-width']).toBe(3);
+    expect(fm['text-size']).toBe(20);
     expect(fm['text-bold']).toBe(true);
   });
 
@@ -99,6 +109,13 @@ describe('parseFrontMatter', () => {
     const fm = parseFrontMatter('---\npalette: "[[Brand Colors]]"\n---\n');
     expect(fm.palette).toBe('[[Brand Colors]]');
   });
+
+  // @convention tools/canvas-player.md [section Style Mapper Front Matter]
+  it('strips surrounding quotes from a quoted key (style-mapper wikilink entries)', () => {
+    const fm = parseFrontMatter(readFixture('Style Mapper.md'));
+    expect(fm['[[Style Warning]]']).toBe('warning');
+    expect(fm.default).toBe('[[Shared Style]]');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -118,30 +135,233 @@ describe('extractWikilinkTarget', () => {
 });
 
 // ---------------------------------------------------------------------------
-// resolveMicroNoteStyle — cascade
+// parseTagList / parseStyleMapper / resolveTagStyleTarget / resolveNodeStyleTarget /
+// composeNodeStyle — tag-based style resolution
 // ---------------------------------------------------------------------------
 
-describe('resolveMicroNoteStyle', () => {
+describe('parseTagList', () => {
   // @convention tools/canvas-player.md [section Micro-note Front Matter]
-  it('applies the style note first, then overrides with local properties', () => {
-    const local = parseFrontMatter(readFixture('Node Concept.md'));
-    const base = parseFrontMatter(readFixture('Shared Style.md'));
-    const resolved = resolveMicroNoteStyle(local, base);
+  it('normalizes a bracket-list value (micro-note tags) into trimmed strings', () => {
+    expect(parseTagList(['warning', ' domain-x '])).toEqual(['warning', 'domain-x']);
+  });
 
-    // inherited from Shared Style, not overridden locally
-    expect(resolved.shape).toBe('diamond');
-    expect(resolved.stroke).toBe('#8A6D1A');
-    expect(resolved['text-size']).toBe(14);
-    expect(resolved['text-bold']).toBe(false);
-    // overridden locally
-    expect(resolved.fill).toBe('#27AE60');
-    expect(resolved.text).toBe('Core Concept');
+  // @convention tools/canvas-player.md [section Style Mapper Front Matter]
+  it('splits a comma-separated scalar value (style-mapper entry) into trimmed tags', () => {
+    expect(parseTagList('warning, domain-x')).toEqual(['warning', 'domain-x']);
+  });
+
+  // @convention none — edge case, no specific convention applies
+  it('returns an empty array for null, undefined, or an empty string', () => {
+    expect(parseTagList(undefined)).toEqual([]);
+    expect(parseTagList(null)).toEqual([]);
+    expect(parseTagList('')).toEqual([]);
+  });
+});
+
+describe('parseConditionList', () => {
+  // @convention tools/canvas-player.md [section Style Mapper Front Matter]
+  it('parses a bare token as a tag condition', () => {
+    expect(parseConditionList('warning')).toEqual([{ type: 'tag', tag: 'warning' }]);
+  });
+
+  // @convention tools/canvas-player.md [section Style Mapper Front Matter]
+  it('parses a key:value token as a property condition', () => {
+    expect(parseConditionList('level:0')).toEqual([{ type: 'property', key: 'level', value: '0' }]);
+  });
+
+  // @convention tools/canvas-player.md [section Style Mapper Front Matter]
+  it('mixes tag and property conditions in the same list', () => {
+    expect(parseConditionList('warning, level:0, domain:flow')).toEqual([
+      { type: 'tag', tag: 'warning' },
+      { type: 'property', key: 'level', value: '0' },
+      { type: 'property', key: 'domain', value: 'flow' },
+    ]);
+  });
+
+  // @convention none — edge case, no specific convention applies
+  it('trims whitespace around the key and value of a property condition', () => {
+    expect(parseConditionList(' level : 0 ')).toEqual([{ type: 'property', key: 'level', value: '0' }]);
+  });
+
+  // @convention none — edge case, no specific convention applies
+  it('returns an empty array for an empty value', () => {
+    expect(parseConditionList('')).toEqual([]);
+  });
+});
+
+describe('parseStyleMapper', () => {
+  // @convention tools/canvas-player.md [section Style Mapper Front Matter]
+  it('parses each wikilink-keyed entry into a style target and its parsed conditions, in file order', () => {
+    const fm = parseFrontMatter(readFixture('Style Mapper.md'));
+    const mapper = parseStyleMapper(fm);
+    expect(mapper.entries).toEqual([{ styleTarget: 'Style Warning', conditions: [{ type: 'tag', tag: 'warning' }] }]);
+  });
+
+  // @convention tools/canvas-player.md [section Style Mapper Front Matter]
+  it('extracts the default entry separately, not as a conditioned rule', () => {
+    const fm = parseFrontMatter(readFixture('Style Mapper.md'));
+    const mapper = parseStyleMapper(fm);
+    expect(mapper.defaultTarget).toBe('Shared Style');
+  });
+
+  // @convention none — edge case, no specific convention applies
+  it('returns a null default target when the style-mapper declares none', () => {
+    const mapper = parseStyleMapper({ '[[Style Warning]]': 'warning' });
+    expect(mapper.defaultTarget).toBeNull();
+  });
+});
+
+describe('buildNodeConditions', () => {
+  // @convention tools/canvas-player.md [section Style Mapper Front Matter]
+  it('turns the tags list into tag conditions', () => {
+    expect(buildNodeConditions({ tags: ['warning', 'domain-x'] })).toEqual([
+      { type: 'tag', tag: 'warning' },
+      { type: 'tag', tag: 'domain-x' },
+    ]);
+  });
+
+  // @convention tools/canvas-player.md [section Style Mapper Front Matter]
+  it('turns other flat properties into property conditions, stringifying the value', () => {
+    expect(buildNodeConditions({ level: 0, domain: 'flow' })).toEqual([
+      { type: 'property', key: 'level', value: '0' },
+      { type: 'property', key: 'domain', value: 'flow' },
+    ]);
   });
 
   // @convention tools/canvas-player.md [section Micro-note Front Matter]
-  it('returns the local front matter unchanged when there is no style reference', () => {
-    const local = parseFrontMatter(readFixture('Node Conclusion.md'));
-    expect(resolveMicroNoteStyle(local, null)).toEqual(local);
+  it('excludes tags, style, icon, image, and text/text-<lang> from the property conditions', () => {
+    const local = {
+      tags: ['warning'], style: '[[X]]', icon: 'play', image: '[[img.png]]',
+      text: 'Hi', 'text-fr': 'Salut', level: 0,
+    };
+    const conditions = buildNodeConditions(local);
+    expect(conditions).toEqual([
+      { type: 'tag', tag: 'warning' },
+      { type: 'property', key: 'level', value: '0' },
+    ]);
+  });
+
+  // @convention none — edge case, no specific convention applies
+  it('returns an empty array for a micro-note with no tags and no extra properties', () => {
+    expect(buildNodeConditions({ text: 'Hi' })).toEqual([]);
+  });
+});
+
+describe('resolveConditionStyleTarget', () => {
+  const entries = [
+    { styleTarget: 'Style Warning', conditions: parseConditionList('warning') },
+    { styleTarget: 'Style Level0 Flow', conditions: parseConditionList('level:0, domain:flow') },
+    { styleTarget: 'Style Level0 Flow Warning', conditions: parseConditionList('warning, level:0, domain:flow') },
+  ];
+
+  // @convention tools/canvas-player.md [section Style Mapper Front Matter]
+  it('matches an entry whose tag condition is satisfied by the node', () => {
+    expect(resolveConditionStyleTarget(buildNodeConditions({ tags: ['warning'] }), entries)).toBe('Style Warning');
+  });
+
+  // @convention tools/canvas-player.md [section Style Mapper Front Matter]
+  it('matches an entry whose property conditions are all satisfied by the node', () => {
+    expect(resolveConditionStyleTarget(buildNodeConditions({ level: 0, domain: 'flow' }), entries)).toBe('Style Level0 Flow');
+  });
+
+  // @convention tools/canvas-player.md [section Style Mapper Front Matter]
+  it('picks the entry with the most matching conditions when several match, mixing tags and properties', () => {
+    const nodeConditions = buildNodeConditions({ tags: ['warning'], level: 0, domain: 'flow' });
+    expect(resolveConditionStyleTarget(nodeConditions, entries)).toBe('Style Level0 Flow Warning');
+  });
+
+  // @convention tools/canvas-player.md [section Style Mapper Front Matter]
+  it('ignores extra node conditions not listed in the entry', () => {
+    const nodeConditions = buildNodeConditions({ tags: ['warning', 'unrelated'] });
+    expect(resolveConditionStyleTarget(nodeConditions, entries)).toBe('Style Warning');
+  });
+
+  // @convention tools/canvas-player.md [section Style Mapper Front Matter]
+  it('breaks a specificity tie by declaration order, the later entry winning', () => {
+    const tied = [
+      { styleTarget: 'First', conditions: parseConditionList('a, b') },
+      { styleTarget: 'Second', conditions: parseConditionList('a, b') },
+    ];
+    const nodeConditions = [{ type: 'tag', tag: 'a' }, { type: 'tag', tag: 'b' }];
+    expect(resolveConditionStyleTarget(nodeConditions, tied)).toBe('Second');
+  });
+
+  // @convention tools/canvas-player.md [section Micro-note Front Matter/Style resolution]
+  it('returns null when no entry matches', () => {
+    expect(resolveConditionStyleTarget(buildNodeConditions({ tags: ['unknown'] }), entries)).toBeNull();
+  });
+});
+
+describe('resolveNodeStyleTarget', () => {
+  const mapper = {
+    entries: [
+      { styleTarget: 'Style Warning', conditions: parseConditionList('warning') },
+      { styleTarget: 'Style Level0', conditions: parseConditionList('level:0') },
+    ],
+    defaultTarget: 'Shared Style',
+  };
+
+  // @convention tools/canvas-player.md [section Micro-note Front Matter/Style resolution]
+  it('uses the direct style override, ignoring tags and properties entirely', () => {
+    expect(resolveNodeStyleTarget({ style: '[[Some Style Note]]', tags: ['warning'] }, mapper)).toBe('Some Style Note');
+  });
+
+  // @convention tools/canvas-player.md [section Micro-note Front Matter/Style resolution]
+  it('resolves through the style-mapper when tags are set and no direct style', () => {
+    expect(resolveNodeStyleTarget({ tags: ['warning'] }, mapper)).toBe('Style Warning');
+  });
+
+  // @convention tools/canvas-player.md [section Micro-note Front Matter/Style resolution]
+  it('resolves through the style-mapper via a flat property condition', () => {
+    expect(resolveNodeStyleTarget({ level: 0 }, mapper)).toBe('Style Level0');
+  });
+
+  // @convention tools/canvas-player.md [section Micro-note Front Matter/Style resolution]
+  it('falls back to the default entry when there are no tags and no other usable property', () => {
+    expect(resolveNodeStyleTarget({ text: 'Hi' }, mapper)).toBe('Shared Style');
+  });
+
+  // @convention tools/canvas-player.md [section Micro-note Front Matter/Style resolution]
+  it('throws when tags or properties are set but match no style-mapper entry', () => {
+    expect(() => resolveNodeStyleTarget({ tags: ['unknown'] }, mapper)).toThrow(/No style-mapper entry matches/);
+    expect(() => resolveNodeStyleTarget({ level: 3 }, mapper)).toThrow(/No style-mapper entry matches/);
+  });
+
+  // @convention tools/canvas-player.md [section Micro-note Front Matter/Style resolution]
+  it('throws when there are no tags, no properties, no direct style, and no default entry', () => {
+    const noDefault = { entries: [], defaultTarget: null };
+    expect(() => resolveNodeStyleTarget({}, noDefault)).toThrow(/no "default" entry/);
+  });
+});
+
+describe('composeNodeStyle', () => {
+  // @convention tools/canvas-player.md [section Micro-note Front Matter]
+  it('combines the resolved style note visual properties with the micro-note content fields', () => {
+    const local = parseFrontMatter(readFixture('Node Intro.md'));
+    const styleFm = parseFrontMatter(readFixture('Style Warning.md'));
+    const composed = composeNodeStyle(local, styleFm);
+    expect(composed.shape).toBe('rounded');
+    expect(composed.fill).toBe('#c0392b33');
+    expect(composed['text-size']).toBe(20);
+    expect(composed.icon).toBe('play');
+    expect(composed.text).toBe('Introduction');
+  });
+
+  // @convention tools/canvas-player.md [section Micro-note Front Matter]
+  it('does not leak routing-only fields (tags, style) or extra properties into the composed style', () => {
+    const local = { tags: ['warning'], style: '[[X]]', icon: 'play', text: 'Hi', level: 0, domain: 'flow' };
+    const composed = composeNodeStyle(local, { shape: 'circle' });
+    expect(composed.tags).toBeUndefined();
+    expect(composed.style).toBeUndefined();
+    expect(composed.level).toBeUndefined();
+    expect(composed.domain).toBeUndefined();
+  });
+
+  // @convention none — edge case, no specific convention applies
+  it('lets local content fields win over an accidental overlap from the style note', () => {
+    const composed = composeNodeStyle({ text: 'Local' }, { text: 'FromStyle', shape: 'circle' });
+    expect(composed.text).toBe('Local');
+    expect(composed.shape).toBe('circle');
   });
 });
 
@@ -277,6 +497,20 @@ describe('parsePresentationScript', () => {
       'show-focus: [[A]]',
     ].join('\n'));
     expect(resolvePaletteTargets(script)).toEqual(['Brand Colors']);
+  });
+
+  // @convention tools/canvas-player.md [section Script Format]
+  it('carries the style-mapper front-matter field through as a single wikilink', () => {
+    const script = parsePresentationScript([
+      '---',
+      'canvas: "[[X.canvas]]"',
+      'style-mapper: "[[My Style Mapper]]"',
+      '---',
+      '',
+      '## Step 0',
+      'show-focus: [[A]]',
+    ].join('\n'));
+    expect(script['style-mapper']).toBe('[[My Style Mapper]]');
   });
 
   // @convention tools/canvas-player.md [section Script Format]
@@ -515,6 +749,72 @@ describe('parsePresentationScript', () => {
     ].join('\n'));
     expect(script.steps).toHaveLength(2);
     expect(script.steps[1].show).toEqual(['[[A]]']);
+  });
+
+  // @convention tools/canvas-player.md [section Script Format]
+  it('keeps a show-focus-each-in heading as a single pseudo-step carrying its raw target list', () => {
+    const script = parsePresentationScript([
+      '---',
+      'canvas: "[[X.canvas]]"',
+      '---',
+      '',
+      '## Step 0',
+      'show-focus: [[Intro Note]]',
+      '',
+      '## Step 1',
+      'show-focus-each-in: [[A]], [Group C], {warning}',
+      'transition: cut',
+    ].join('\n'));
+    expect(script.steps).toHaveLength(2); // not expanded yet — needs canvas/vault data, see resolveScriptSteps()
+    expect(script.steps[1]).toEqual({
+      show: [], hide: [], inFocus: [], outFocus: [], transition: 'cut', label: '1',
+      eachInTargets: ['[[A]]', '[Group C]', '{warning}'],
+    });
+  });
+
+  // @convention tools/canvas-player.md [section Script Format]
+  it('defaults show-focus-each-in to transition: fade when not specified', () => {
+    const script = parsePresentationScript([
+      '---', 'canvas: "[[X.canvas]]"', '---', '',
+      '## Step 0', 'show-focus: [[Intro Note]]', '',
+      '## Step 1', 'show-focus-each-in: [[A]]',
+    ].join('\n'));
+    expect(script.steps[1].transition).toBe('fade');
+  });
+
+  // @convention tools/canvas-player.md [section Script Format]
+  it('throws when show-focus-each-in is combined with another directive on the same step', () => {
+    const source = [
+      '---', 'canvas: "[[X.canvas]]"', '---', '',
+      '## Step 0', 'show-focus: [[Intro Note]]', '',
+      '## Step 1', 'show-focus-each-in: [[A]]', 'hide: [[Intro Note]]',
+    ].join('\n');
+    expect(() => parsePresentationScript(source)).toThrow(/cannot be combined/);
+  });
+
+  // @convention tools/canvas-player.md [section Script Format]
+  it('throws when show-focus-each-in is used on Step 0', () => {
+    const source = ['---', 'canvas: "[[X.canvas]]"', '---', '', '## Step 0', 'show-focus-each-in: [[A]]'].join('\n');
+    expect(() => parsePresentationScript(source)).toThrow(/not allowed on Step 0/);
+  });
+
+  // @convention tools/canvas-player.md [section Script Format]
+  it('throws when show-focus-each and show-focus-each-in both appear on the same step', () => {
+    const source = [
+      '---', 'canvas: "[[X.canvas]]"', '---', '',
+      '## Step 0', 'show-focus: [[Intro Note]]', '',
+      '## Step 1', 'show-focus-each: [[A]]', 'show-focus-each-in: [[B]]',
+    ].join('\n');
+    expect(() => parsePresentationScript(source)).toThrow(/cannot both appear/);
+  });
+
+  // @convention regression: parseTargetList didn't track '{'/'}' depth, splitting a multi-condition group like {level:3, domain:flow} at its own internal comma instead of only at the list's top-level separator
+  it('keeps a multi-condition group as a single token, not split at its internal comma', () => {
+    const script = parsePresentationScript([
+      '---', 'canvas: "[[X.canvas]]"', '---', '',
+      '## Step 0', 'show-focus: {level:3, domain:flow}, [[Other Note]]',
+    ].join('\n'));
+    expect(script.steps[0].show).toEqual(['{level:3, domain:flow}', '[[Other Note]]']);
   });
 
   // @convention none — edge case, no specific convention applies
@@ -966,6 +1266,35 @@ describe('classifyReference', () => {
   it('throws on a token with no brackets at all', () => {
     expect(() => classifyReference('Core Ideas')).toThrow(/Invalid script target syntax/);
   });
+
+  // @convention tools/canvas-player.md [section Script Format]
+  it('classifies a bare tag condition-group token', () => {
+    expect(classifyReference('{warning}')).toEqual({
+      type: 'condition',
+      conditions: [{ type: 'tag', tag: 'warning' }],
+    });
+  });
+
+  // @convention tools/canvas-player.md [section Script Format]
+  it('classifies a mixed tag/property condition-group token, same syntax as a style-mapper entry', () => {
+    expect(classifyReference('{level:0, domain:flow}')).toEqual({
+      type: 'condition',
+      conditions: [
+        { type: 'property', key: 'level', value: '0' },
+        { type: 'property', key: 'domain', value: 'flow' },
+      ],
+    });
+  });
+
+  // @convention none — edge case, no specific convention applies
+  it('throws on an empty condition group', () => {
+    expect(() => classifyReference('{}')).toThrow(/Invalid script target syntax/);
+  });
+
+  // @convention tools/canvas-player.md [section Script Format]
+  it('throws on a whitespace-only condition group (no usable condition)', () => {
+    expect(() => classifyReference('{ }')).toThrow(/at least one tag or key:value condition/);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -1010,6 +1339,65 @@ describe('buildGroupLookup', () => {
 });
 
 // ---------------------------------------------------------------------------
+// buildNodeConditionsLookup / buildNodeFileById / resolveConditionGroupIds —
+// condition-group script-target resolution, see
+// tools/canvas-player.md [section Script Format]
+// ---------------------------------------------------------------------------
+
+describe('buildNodeConditionsLookup', () => {
+  // @convention tools/canvas-player.md [section Script Format]
+  it("keys each file node's own condition set by node id, reusing buildNodeConditions()", () => {
+    const lookup = buildNodeConditionsLookup([
+      { id: 'n1', localFm: { tags: ['warning'] } },
+      { id: 'n2', localFm: { level: 0 } },
+    ]);
+    expect(lookup.get('n1')).toEqual([{ type: 'tag', tag: 'warning' }]);
+    expect(lookup.get('n2')).toEqual([{ type: 'property', key: 'level', value: '0' }]);
+  });
+
+  // @convention none — edge case, no specific convention applies
+  it('maps a node with no tags and no extra properties to an empty condition set', () => {
+    const lookup = buildNodeConditionsLookup([{ id: 'n1', localFm: { text: 'Hi' } }]);
+    expect(lookup.get('n1')).toEqual([]);
+  });
+});
+
+describe('buildNodeFileById', () => {
+  // @convention tools/canvas-player.md [section Script Format]
+  it('maps each file node id to its linked micro-note vault-relative path, the inverse of buildNodeLookup', () => {
+    const map = buildNodeFileById([{ id: 'nodeIntro', file: 'tools/canvas-player-demo/Node Intro.md' }]);
+    expect(map.get('nodeIntro')).toBe('tools/canvas-player-demo/Node Intro.md');
+  });
+});
+
+describe('resolveConditionGroupIds', () => {
+  const nodeConditionsLookup = new Map([
+    ['n1', [{ type: 'tag', tag: 'warning' }]],
+    ['n2', [{ type: 'tag', tag: 'warning' }, { type: 'property', key: 'level', value: '0' }]],
+    ['n3', [{ type: 'property', key: 'domain', value: 'flow' }]],
+  ]);
+
+  // @convention tools/canvas-player.md [section Script Format]
+  it('returns every node whose conditions satisfy a single tag condition', () => {
+    expect(resolveConditionGroupIds([{ type: 'tag', tag: 'warning' }], nodeConditionsLookup).sort())
+      .toEqual(['n1', 'n2']);
+  });
+
+  // @convention tools/canvas-player.md [section Script Format]
+  it('requires every listed condition to match (AND), narrowing the result', () => {
+    expect(resolveConditionGroupIds(
+      [{ type: 'tag', tag: 'warning' }, { type: 'property', key: 'level', value: '0' }],
+      nodeConditionsLookup,
+    )).toEqual(['n2']);
+  });
+
+  // @convention tools/canvas-player.md [section Script Format]
+  it('returns an empty array, not an error, when no node matches', () => {
+    expect(resolveConditionGroupIds([{ type: 'tag', tag: 'unknown' }], nodeConditionsLookup)).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // resolveScriptSteps
 // ---------------------------------------------------------------------------
 
@@ -1043,6 +1431,135 @@ describe('resolveScriptSteps', () => {
     const steps = [{ show: ['[Unknown Label]'], hide: [], inFocus: [], outFocus: [], transition: 'cut' }];
     expect(() => resolveScriptSteps(steps, { nodeLookup: new Map(), groupLookup: new Map(), vaultIndex: new Map() }))
       .toThrow(/No group/);
+  });
+});
+
+describe('resolveScriptSteps — condition-group targets', () => {
+  const vaultIndex = new Map([['A.md', ['A.md']], ['B.md', ['B.md']]]);
+  const nodeLookup = new Map([['A.md', 'nA'], ['B.md', 'nB']]);
+  const groupLookup = new Map();
+  const nodeConditionsLookup = new Map([
+    ['nA', [{ type: 'tag', tag: 'warning' }]],
+    ['nB', [{ type: 'tag', tag: 'info' }]],
+  ]);
+
+  // @convention tools/canvas-player.md [section Script Format]
+  it('resolves a {tag} token to every matching file node id', () => {
+    const steps = [{ show: ['{warning}'], hide: [], inFocus: ['{warning}'], outFocus: [], transition: 'cut' }];
+    const resolved = resolveScriptSteps(steps, { nodeLookup, groupLookup, vaultIndex, nodeConditionsLookup });
+    expect(resolved[0].show).toEqual(['nA']);
+    expect(resolved[0].inFocus).toEqual(['nA']);
+  });
+
+  // @convention tools/canvas-player.md [section Script Format]
+  it('unions a condition-group token with a wikilink token in the same list', () => {
+    const steps = [{ show: ['[[B]]', '{warning}'], hide: [], inFocus: [], outFocus: [], transition: 'cut' }];
+    const resolved = resolveScriptSteps(steps, { nodeLookup, groupLookup, vaultIndex, nodeConditionsLookup });
+    expect(resolved[0].show.sort()).toEqual(['nA', 'nB']);
+  });
+
+  // @convention tools/canvas-player.md [section Script Format]
+  it('resolves a condition group matching zero nodes to an empty list, not an error', () => {
+    const steps = [{ show: ['{unknown-tag}'], hide: [], inFocus: [], outFocus: [], transition: 'cut' }];
+    const resolved = resolveScriptSteps(steps, { nodeLookup, groupLookup, vaultIndex, nodeConditionsLookup });
+    expect(resolved[0].show).toEqual([]);
+  });
+
+  // @convention regression: parseTargetList previously split a multi-condition token like {warning, level:0} at its own internal comma before classifyReference ever saw it, so the AND semantics never actually engaged end to end
+  it('resolves a multi-condition {tag, key:value} token end to end, requiring every condition (AND)', () => {
+    const steps = [{ show: ['{warning, level:0}'], hide: [], inFocus: [], outFocus: [], transition: 'cut' }];
+    const mixedLookup = new Map([
+      ['nOnlyTag', [{ type: 'tag', tag: 'warning' }]],
+      ['nBoth', [{ type: 'tag', tag: 'warning' }, { type: 'property', key: 'level', value: '0' }]],
+    ]);
+    const resolved = resolveScriptSteps(steps, { nodeLookup, groupLookup, vaultIndex, nodeConditionsLookup: mixedLookup });
+    expect(resolved[0].show).toEqual(['nBoth']);
+  });
+});
+
+describe('resolveScriptSteps — show-focus-each-in expansion', () => {
+  const vaultIndex = new Map([['Solo.md', ['Solo.md']]]);
+  const nodeLookup = new Map([
+    ['Solo.md', 'nSolo'],
+    ['tools/z-note.md', 'nZ'],
+    ['tools/a-note.md', 'nA'],
+    ['tools/m-note.md', 'nM'],
+  ]);
+  const groupLookup = new Map([['My Group', 'groupG']]);
+  const groupMembership = new Map([['groupG', ['nZ', 'nA']]]);
+  const nodeFileById = new Map([
+    ['nSolo', 'Solo.md'],
+    ['nZ', 'tools/z-note.md'],
+    ['nA', 'tools/a-note.md'],
+    ['nM', 'tools/m-note.md'],
+  ]);
+  const nodeConditionsLookup = new Map([
+    ['nZ', [{ type: 'tag', tag: 'reveal' }]],
+    ['nA', []],
+    ['nM', [{ type: 'tag', tag: 'reveal' }]],
+  ]);
+
+  // @convention tools/canvas-player.md [section Script Format]
+  it('expands a group-label target into one step per member, ordered by filename', () => {
+    const script = parsePresentationScript([
+      '---', 'canvas: "[[X.canvas]]"', '---', '',
+      '## Step 0', 'show-focus: [[Solo]]', '',
+      '## Step 1', 'show-focus-each-in: [My Group]',
+    ].join('\n'));
+    const resolved = resolveScriptSteps(script.steps, { nodeLookup, groupLookup, vaultIndex, groupMembership, nodeFileById, nodeConditionsLookup });
+    expect(resolved).toHaveLength(3); // Step 0 + 2 members of My Group
+    expect(resolved[1].show).toEqual(['nA']); // a-note.md sorts before z-note.md
+    expect(resolved[2].show).toEqual(['nZ']);
+  });
+
+  // @convention tools/canvas-player.md [section Script Format]
+  it('expands a condition-group target into one step per matching member, ordered by filename', () => {
+    const script = parsePresentationScript([
+      '---', 'canvas: "[[X.canvas]]"', '---', '',
+      '## Step 0', 'show-focus: [[Solo]]', '',
+      '## Step 1', 'show-focus-each-in: {reveal}',
+    ].join('\n'));
+    const resolved = resolveScriptSteps(script.steps, { nodeLookup, groupLookup, vaultIndex, groupMembership, nodeFileById, nodeConditionsLookup });
+    expect(resolved).toHaveLength(3); // Step 0 + 2 nodes tagged reveal
+    expect(resolved[1].show).toEqual(['nM']); // m-note.md sorts before z-note.md
+    expect(resolved[2].show).toEqual(['nZ']);
+  });
+
+  // @convention tools/canvas-player.md [section Script Format]
+  it('treats an individual wikilink target as a group of one, producing a single step', () => {
+    const script = parsePresentationScript([
+      '---', 'canvas: "[[X.canvas]]"', '---', '',
+      '## Step 0', 'show-focus: [[Solo]]', '',
+      '## Step 1', 'show-focus-each-in: [[Solo]]',
+    ].join('\n'));
+    const resolved = resolveScriptSteps(script.steps, { nodeLookup, groupLookup, vaultIndex, groupMembership, nodeFileById, nodeConditionsLookup });
+    expect(resolved).toHaveLength(2);
+    expect(resolved[1].show).toEqual(['nSolo']);
+  });
+
+  // @convention tools/canvas-player.md [section Script Format]
+  it('mixes an individual target and a group target in the same list, each contributing its own step(s) in order', () => {
+    const script = parsePresentationScript([
+      '---', 'canvas: "[[X.canvas]]"', '---', '',
+      '## Step 0', 'show-focus: [[Solo]]', '',
+      '## Step 1', 'show-focus-each-in: [[Solo]], [My Group]',
+    ].join('\n'));
+    const resolved = resolveScriptSteps(script.steps, { nodeLookup, groupLookup, vaultIndex, groupMembership, nodeFileById, nodeConditionsLookup });
+    expect(resolved).toHaveLength(4); // Step 0 + Solo + 2 group members
+    expect(resolved[1].show).toEqual(['nSolo']);
+    expect(resolved[2].show).toEqual(['nA']);
+    expect(resolved[3].show).toEqual(['nZ']);
+  });
+
+  // @convention tools/canvas-player.md [section Script Format]
+  it('contributes zero steps for a condition-group target matching no node', () => {
+    const script = parsePresentationScript([
+      '---', 'canvas: "[[X.canvas]]"', '---', '',
+      '## Step 0', 'show-focus: [[Solo]]', '',
+      '## Step 1', 'show-focus-each-in: {no-such-tag}',
+    ].join('\n'));
+    const resolved = resolveScriptSteps(script.steps, { nodeLookup, groupLookup, vaultIndex, groupMembership, nodeFileById, nodeConditionsLookup });
+    expect(resolved).toHaveLength(1); // just Step 0
   });
 });
 

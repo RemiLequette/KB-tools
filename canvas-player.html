@@ -12,6 +12,8 @@
   .cp-node-body { fill: var(--cp-text, #fff); opacity: 0.8; pointer-events: none; user-select: none; text-anchor: middle; dominant-baseline: middle; }
   .cp-icon-badge { fill: rgba(255,255,255,0.85); }
   .cp-icon-letter { fill: #222; font-weight: bold; text-anchor: middle; dominant-baseline: middle; pointer-events: none; }
+  .cp-badge { stroke: #fff; stroke-width: 1.5; pointer-events: none; }
+  .cp-badge-letter { fill: #fff; font-weight: bold; text-anchor: middle; dominant-baseline: middle; pointer-events: none; }
   .cp-edge { stroke: var(--cp-edge, #888); stroke-width: var(--cp-edge-width, 1.5); fill: none; }
   .cp-edge-arrow { fill: var(--cp-edge, #888); }
   #overlay {
@@ -77,12 +79,14 @@
   <span id="status-dot" title="Local server status"></span>
   <button id="btn-open" title="Open a presentation script">Open script</button>
   <button id="btn-reload" title="Reload script, canvas, and micro-notes from disk">⟳</button>
+  <button id="btn-first" title="First step">⏮</button>
   <button id="btn-prev" title="Previous step">◀</button>
   <span id="step-nav">
     <input id="step-input" type="number" min="1" step="1" title="Go to step (Enter to jump)">
     <span id="step-total">/ –</span>
   </span>
   <button id="btn-next" title="Next step">▶</button>
+  <button id="btn-last" title="Last step">⏭</button>
   <select id="step-select" title="Jump to a step by its label"></select>
   <select id="lang-select" title="Presentation language">
     <option value="en">EN</option>
